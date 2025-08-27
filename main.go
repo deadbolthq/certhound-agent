@@ -8,23 +8,22 @@ import (
 )
 
 func main() {
-	var dir string
-
-	// Default path (Linux example)
+	dir := "/etc/ssl/certs"
 	if len(os.Args) > 1 {
 		dir = os.Args[1]
-	} else {
-		dir = "/etc/ssl/certs"
 	}
 
-	fmt.Println("Scanning directory:", dir)
-
-	certs, err := scanner.ScanCertFiles(dir)
+	certs, err := scanner.ScanAllCertificates(dir)
 	if err != nil {
 		fmt.Println("Error scanning certificates:", err)
 		return
 	}
 
-	fmt.Printf("Found %d certificates\n\n", len(certs))
-	scanner.PrintCertInfo(certs)
+	jsonData, err := scanner.CertificatesToJSON(certs)
+	if err != nil {
+		fmt.Println("Error converting to JSON:", err)
+		return
+	}
+
+	fmt.Println(string(jsonData))
 }
