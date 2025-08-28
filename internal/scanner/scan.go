@@ -10,10 +10,13 @@ Date: 2025-08-27
 package scanner
 
 import (
+	"crypto/sha256" // For computing certificate fingerprints
 	"crypto/x509"   // For parsing X.509 certificates
+	"encoding/hex"  // For encoding fingerprints as hex strings
 	"encoding/json" // For JSON marshaling
 	"encoding/pem"  // For decoding PEM blocks
 	"io/fs"         // For file system directory walking
+	"math/big"      // For handling big integers (serial numbers
 	"os"            // For reading files and checking existence
 	"path/filepath" // For cross-platform file path handling
 	"runtime"       // For detecting operating system
@@ -37,6 +40,10 @@ import (
 type CertInfo struct {
 	Subject      string   `json:"subject"`
 	Issuer       string   `json:"issuer"`
+	SerialNumber string   `json:"serial_number"`
+	Fingerprint  string   `json:"fingerprint_sha256"`
+	KeyUsage     []string `json:"key_usage,omitempty"`
+	ExtKeyUsage  []string `json:"extended_key_usage,omitempty"`
 	NotBefore    string   `json:"not_before"`
 	NotAfter     string   `json:"not_after"`
 	DNSNames     []string `json:"dns_names"`
@@ -117,6 +124,10 @@ func ScanCertFiles(dir string) ([]CertInfo, error) {
 				certInfos = append(certInfos, CertInfo{
 					Subject:      cert.Subject.String(),
 					Issuer:       cert.Issuer.String(),
+					SerialNumber: getSerialHex(cert.SerialNumber),
+					Fingerprint:  getFingerprintSHA256(cert),
+					KeyUsage:     mapKeyUsage(cert.KeyUsage),
+					ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
 					NotBefore:    cert.NotBefore.Format(time.RFC3339),
 					NotAfter:     cert.NotAfter.Format(time.RFC3339),
 					DNSNames:     cert.DNSNames,
@@ -243,4 +254,87 @@ func ScanAllCertificates(dir string) ([]CertInfo, error) {
 	}
 
 	return certs, nil
+}
+
+// getFingerprintSHA256 computes the SHA-256 fingerprint of a certificate.
+func getFingerprintSHA256(cert *x509.Certificate) string {
+	sum := sha256.Sum256(cert.Raw)
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
+}
+
+// getSerialHex returns the serial number of a certificate as a hexadecimal string.
+func getSerialHex(sn *big.Int) string {
+	if sn == nil {
+		return ""
+	}
+	return strings.ToUpper(sn.Text(16))
+}
+
+// mapKeyUsage converts the KeyUsage bitmask to a slice of human-readable strings.
+func mapKeyUsage(ku x509.KeyUsage) []string {
+	var usages []string
+	if ku&x509.KeyUsageDigitalSignature != 0 {
+		usages = append(usages, "DigitalSignature")
+	}
+	if ku&x509.KeyUsageContentCommitment != 0 {
+		usages = append(usages, "ContentCommitment")
+	}
+	if ku&x509.KeyUsageKeyEncipherment != 0 {
+		usages = append(usages, "KeyEncipherment")
+	}
+	if ku&x509.KeyUsageDataEncipherment != 0 {
+		usages = append(usages, "DataEncipherment")
+	}
+	if ku&x509.KeyUsageKeyAgreement != 0 {
+		usages = append(usages, "KeyAgreement")
+	}
+	if ku&x509.KeyUsageCertSign != 0 {
+		usages = append(usages, "CertSign")
+	}
+	if ku&x509.KeyUsageCRLSign != 0 {
+		usages = append(usages, "CRLSign")
+	}
+	if ku&x509.KeyUsageEncipherOnly != 0 {
+		usages = append(usages, "EncipherOnly")
+	}
+	if ku&x509.KeyUsageDecipherOnly != 0 {
+		usages = append(usages, "DecipherOnly")
+	}
+	return usages
+}
+
+// mapExtKeyUsage converts the ExtendedKeyUsage slice to a slice of human-readable strings.
+func mapExtKeyUsage(eku []x509.ExtKeyUsage) []string {
+	var usages []string
+	for _, usage := range eku {
+		switch usage {
+		case x509.ExtKeyUsageAny:
+			usages = append(usages, "Any")
+		case x509.ExtKeyUsageServerAuth:
+			usages = append(usages, "ServerAuth")
+		case x509.ExtKeyUsageClientAuth:
+			usages = append(usages, "ClientAuth")
+		case x509.ExtKeyUsageCodeSigning:
+			usages = append(usages, "CodeSigning")
+		case x509.ExtKeyUsageEmailProtection:
+			usages = append(usages, "EmailProtection")
+		case x509.ExtKeyUsageIPSECEndSystem:
+			usages = append(usages, "IPSECEndSystem")
+		case x509.ExtKeyUsageIPSECTunnel:
+			usages = append(usages, "IPSECTunnel")
+		case x509.ExtKeyUsageIPSECUser:
+			usages = append(usages, "IPSECUser")
+		case x509.ExtKeyUsageTimeStamping:
+			usages = append(usages, "TimeStamping")
+		case x509.ExtKeyUsageOCSPSigning:
+			usages = append(usages, "OCSPSigning")
+		case x509.ExtKeyUsageMicrosoftServerGatedCrypto:
+			usages = append(usages, "MicrosoftServerGatedCrypto")
+		case x509.ExtKeyUsageNetscapeServerGatedCrypto:
+			usages = append(usages, "NetscapeServerGatedCrypto")
+		default:
+			usages = append(usages, "Unknown")
+		}
+	}
+	return usages
 }

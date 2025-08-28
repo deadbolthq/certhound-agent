@@ -16,7 +16,7 @@ import (
 	"os"  // Provides access to command-line arguments
 
 	// Import the local scanner package for certificate scanning and JSON conversion
-	"github.com/keelw/certsync-agent/scanner"
+	"github.com/keelw/certsync-agent/internal/scanner"
 )
 
 /*

@@ -89,6 +89,10 @@ func ScanWindowsCertStore() ([]CertInfo, error) {
 		certInfos = append(certInfos, CertInfo{
 			Subject:      cert.Subject.String(),
 			Issuer:       cert.Issuer.String(),
+			SerialNumber: getSerialHex(cert.SerialNumber),
+			Fingerprint:  getFingerprintSHA256(cert),
+			KeyUsage:     mapKeyUsage(cert.KeyUsage),
+			ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
 			NotBefore:    cert.NotBefore.Format(time.RFC3339),
 			NotAfter:     cert.NotAfter.Format(time.RFC3339),
 			DNSNames:     cert.DNSNames,
