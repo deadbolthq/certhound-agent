@@ -85,4 +85,4 @@ These tools helped generate boilerplate code, documentation, and comments.
 
 License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This project is licensed under for personal use only. See the LICENSE file for details.
