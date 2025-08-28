@@ -1,4 +1,4 @@
-module github.com/keelw/certcync-agent
+module github.com/keelw/certsync-agent
 
 go 1.25.0
 
