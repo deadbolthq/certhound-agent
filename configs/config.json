@@ -1,0 +1,12 @@
+{
+  "ScanPaths": [
+    "/etc/ssl/certs",
+    "/usr/local/share/ca-certificates"
+  ],
+  "ScanIntervalSeconds": 3600,
+  "LogPath": "/var/log/certsync",
+  "AWSEndpoint": "https://example.com/api/certs",
+  "TLSVerify": true,
+  "MaxRetries": 3,
+  "AgentName": "CertSyncAgent"
+}

@@ -1,59 +1,95 @@
-/*
-Main package for the CertCync Agent.
-
-This executable scans certificates from a specified directory (defaulting to /etc/ssl/certs)
-and prints them as JSON to standard output. On Windows, it can also scan the system
-certificate store.
-
-Author: Will Keel
-Date: 2025-08-27
-*/
-
 package main
 
 import (
-	"fmt" // Provides Println for output
-	"os"  // Provides access to command-line arguments
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	// Import the local scanner package for certificate scanning and JSON conversion
+	"github.com/keelw/certsync-agent/internal/config"
+	"github.com/keelw/certsync-agent/internal/logger"
+	"github.com/keelw/certsync-agent/internal/payload"
 	"github.com/keelw/certsync-agent/internal/scanner"
+	"github.com/keelw/certsync-agent/internal/sender"
 )
 
-/*
-main is the entry point for the executable.
+const agentVersion = "0.1.0"
 
-Behavior:
- 1. Determines the directory to scan. Defaults to "/etc/ssl/certs" but can be overridden
-    with the first command-line argument.
- 2. Calls ScanAllCertificates from the scanner package to scan the directory (and
-    Windows store if applicable).
- 3. Converts the resulting certificates to pretty-printed JSON.
- 4. Prints the JSON to standard output.
- 5. Handles errors gracefully by printing them and exiting early.
-*/
 func main() {
-	// Default directory for scanning certificates
-	dir := "/etc/ssl/certs"
-
-	// Override directory if a command-line argument is provided
-	if len(os.Args) > 1 {
-		dir = os.Args[1]
-	}
-
-	// Scan all certificates in the directory (and Windows store on Windows)
-	certs, err := scanner.ScanAllCertificates(dir)
+	// 1️⃣ Load config
+	cfg, err := config.LoadConfig("../../configs/config.json")
 	if err != nil {
-		fmt.Println("Error scanning certificates:", err)
-		return
+		fmt.Printf("Error loading config: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Convert the slice of CertInfo to JSON
-	jsonData, err := scanner.CertificatesToJSON(certs)
-	if err != nil {
-		fmt.Println("Error converting to JSON:", err)
-		return
+	// 2️⃣ Initialize logger
+	log := logger.NewLogger(cfg.LogPath)
+	log.Infof("CertSync agent v%s starting...", agentVersion)
+
+	// 3️⃣ Setup AWS sender (TLS, retries)
+	senderClient := sender.NewSender(cfg.AWSEndpoint, cfg.TLSVerify, cfg.MaxRetries)
+
+	// 4️⃣ Setup graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigs
+		log.Infof("Shutdown signal received, stopping agent...")
+		cancel()
+	}()
+
+	// 5️⃣ Main agent loop
+	ticker := time.NewTicker(time.Duration(cfg.ScanIntervalSeconds) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Infof("CertSync agent stopped.")
+			return
+		case <-ticker.C:
+			runScan(cfg, log, senderClient)
+		}
+	}
+}
+
+// runScan performs a single scan and handles logging + sending
+func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender) {
+	log.Infof("Starting certificate scan...")
+
+	var allCerts []scanner.CertInfo
+
+	// Loop over all configured scan paths
+	for _, path := range cfg.ScanPaths {
+		certs, err := scanner.ScanAllCertificates(path)
+		if err != nil {
+			log.Errorf("Error scanning %s: %v", path, err)
+			continue
+		}
+		allCerts = append(allCerts, certs...)
 	}
 
-	// Print the JSON representation of certificates
-	fmt.Println(string(jsonData))
+	log.Infof("Found %d certificates", len(allCerts))
+
+	// Build payload
+	hostPayload := payload.NewPayload(allCerts, agentVersion)
+
+	// Log to JSON file locally
+	if err := logger.WriteJSON(hostPayload, cfg.LogPath); err != nil {
+		log.Errorf("Error writing log: %v", err)
+	}
+
+	// Send to AWS (comment if not configured yet)
+	// err = senderClient.Send(hostPayload)
+	// if err != nil {
+	//     log.Errorf("Error sending to AWS: %v", err)
+	// }
+
+	log.Infof("Scan completed.")
 }
