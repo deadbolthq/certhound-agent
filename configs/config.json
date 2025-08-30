@@ -3,10 +3,19 @@
     "/etc/ssl/certs",
     "/usr/local/share/ca-certificates"
   ],
+    "ScanPathsWindows": [
+    "C:\\ProgramData\\ssl\\certs",
+    "C:\\Windows\\System32\\certificates"
+  ],
   "ScanIntervalSeconds": 5,
   "LogPath": "../../logs/",
+  "Verbose": false,
+  "LogLevel": "ERROR",
   "AWSEndpoint": "https://example.com/api/certs",
   "TLSVerify": true,
   "MaxRetries": 3,
-  "AgentName": "CertSyncAgent"
+  "AgentName": "CertSyncAgent",
+  "IncludeIPAddresses": false,
+  "IncludeSelfSigned": false,
+  "PayloadVersion": "1.0"
 }

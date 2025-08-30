@@ -13,10 +13,28 @@ type Logger struct {
 	logDir    string
 	logFile   *os.File
 	writeFile bool
+	level     string
+	verbose   bool
 }
 
+// Colors for terminal output/logs
+const (
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorYellow = "\033[33m"
+	ColorBlue   = "\033[34m"
+	ColorPurple = "\033[35m"
+)
+
+// Singleton instance
+var globalLogger *Logger
+
 // NewLogger initializes the logger
-func NewLogger(logDir string) *Logger {
+func NewLogger(logDir string, level string, verbose bool) *Logger {
+	if globalLogger != nil {
+		return globalLogger
+	}
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		os.MkdirAll(logDir, 0755)
 	}
@@ -26,19 +44,47 @@ func NewLogger(logDir string) *Logger {
 	f, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	writeFile := (err == nil)
 
-	return &Logger{logDir: logDir, logFile: f, writeFile: writeFile}
+	globalLogger = &Logger{logDir: logDir, logFile: f, writeFile: writeFile, level: level, verbose: verbose}
+	return globalLogger
 }
 
 // log is the shared logging function
 func (l *Logger) log(level string, format string, a ...interface{}) {
+	// Only log if message level >= configured level
+	levelPriority := map[string]int{"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
+	cfgLevel := l.level
+	if cfgLevel == "" {
+		cfgLevel = "INFO"
+	}
+	if levelPriority[level] < levelPriority[cfgLevel] {
+		return
+	}
+	if level == "DEBUG" && !l.verbose {
+		return
+	}
+
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	msg := fmt.Sprintf(format, a...)
 	line := fmt.Sprintf("%s [%s] %s\n", timestamp, level, msg)
 
-	// Print to console
-	fmt.Print(line)
+	var colored string
+	switch level {
+	case "INFO":
+		colored = ColorGreen + line + ColorReset
+	case "ERROR":
+		colored = ColorRed + line + ColorReset
+	case "DEBUG":
+		colored = ColorBlue + line + ColorReset
+	case "WARN":
+		colored = ColorYellow + line + ColorReset
+	default:
+		colored = line
+	}
 
-	// Also write to file if available
+	// Print to console
+	fmt.Print(colored)
+
+	// Also write to file if available (in plain color text)
 	if l.writeFile && l.logFile != nil {
 		l.logFile.WriteString(line)
 	}
