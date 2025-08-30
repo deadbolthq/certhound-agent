@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -31,12 +32,14 @@ func main() {
 
 	// 3️⃣ Setup AWS sender (TLS, retries)
 	senderClient := sender.NewSender(cfg.AWSEndpoint, cfg.TLSVerify, cfg.MaxRetries)
+	log.Infof("Sender initialized for endpoint: %s", cfg.AWSEndpoint)
 
 	// 4️⃣ Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	log.Infof("Press Ctrl+C to stop the agent.") //dev code
 
 	go func() {
 		<-sigs
@@ -44,8 +47,12 @@ func main() {
 		cancel()
 	}()
 
+	// Run initial scan immediately
+	runScan(cfg, log, senderClient)
+
 	// 5️⃣ Main agent loop
 	ticker := time.NewTicker(time.Duration(cfg.ScanIntervalSeconds) * time.Second)
+	log.Infof("Starting scan loop with interval: %s", time.Duration(cfg.ScanIntervalSeconds)*time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -79,6 +86,15 @@ func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender
 
 	// Build payload
 	hostPayload := payload.NewPayload(allCerts, agentVersion)
+
+	// Print JSON payload to console (for debugging)
+	pretty, err := json.MarshalIndent(hostPayload, "", "  ")
+	if err != nil {
+		log.Errorf("Error marshalling payload: %v", err)
+	} else {
+		fmt.Println("=== Payload ===")
+		fmt.Println(string(pretty))
+	}
 
 	// Log to JSON file locally
 	if err := logger.WriteJSON(hostPayload, cfg.LogPath); err != nil {

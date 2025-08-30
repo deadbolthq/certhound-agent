@@ -3,8 +3,8 @@
     "/etc/ssl/certs",
     "/usr/local/share/ca-certificates"
   ],
-  "ScanIntervalSeconds": 3600,
-  "LogPath": "/var/log/certsync",
+  "ScanIntervalSeconds": 5,
+  "LogPath": "../../logs/",
   "AWSEndpoint": "https://example.com/api/certs",
   "TLSVerify": true,
   "MaxRetries": 3,
