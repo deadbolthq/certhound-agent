@@ -18,89 +18,95 @@ import (
 	"time"        // For working with certificate expiration dates
 	"unsafe"      // For converting pointers to byte slices
 
-	"golang.org/x/sys/windows" // Windows API bindings for certificate store access
+	"github.com/keelw/certsync-agent/internal/logger" // For logging
+	"golang.org/x/sys/windows"                        // Windows API bindings for certificate store access
 )
 
-/*
-ScanWindowsCertStore scans the current user's "MY" certificate store on Windows
-and returns certificates in JSON-friendly CertInfo format.
+// WindowsKeyPath is a placeholder string for private key locations.
+// Windows certificate stores do not expose filesystem paths for private keys.
+// This constant will always be returned in KeyPath for Windows certificates.
+const WindowsKeyPath = "WINDOWS_STORE_KEY"
 
-Behavior:
-1. Opens the "MY" system certificate store in read-only mode.
-2. Enumerates all certificates in the store.
-3. Parses each certificate and filters out non-domain/self-signed root certificates.
-4. Converts IP addresses to strings and checks if the certificate is expiring soon.
-5. Returns a slice of CertInfo objects representing all valid domain certificates.
-
-Returns:
-
-	[]CertInfo - Slice of certificates
-	error      - Any error encountered while opening or reading the store
-*/
+// ScanWindowsCertStore scans multiple Windows certificate stores and returns
+// certificates in CertInfo format.
 func ScanWindowsCertStore() ([]CertInfo, error) {
 	var certInfos []CertInfo
 
-	// Open the current user's "MY" certificate store in read-only mode
-	h, err := windows.CertOpenStore(
-		windows.CERT_STORE_PROV_SYSTEM, 0, 0,
-		windows.CERT_STORE_OPEN_EXISTING_FLAG|windows.CERT_STORE_READONLY_FLAG|windows.CERT_SYSTEM_STORE_CURRENT_USER,
-		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr("MY"))),
-	)
-	if err != nil {
-		return nil, err
+	var windowsStores = []struct {
+		systemStore uint32
+		storeName   string
+	}{
+		{windows.CERT_SYSTEM_STORE_CURRENT_USER, "MY"},
+		{windows.CERT_SYSTEM_STORE_CURRENT_USER, "ROOT"},
+		{windows.CERT_SYSTEM_STORE_CURRENT_USER, "CA"},
+		{windows.CERT_SYSTEM_STORE_LOCAL_MACHINE, "MY"},
+		{windows.CERT_SYSTEM_STORE_LOCAL_MACHINE, "ROOT"},
+		{windows.CERT_SYSTEM_STORE_LOCAL_MACHINE, "CA"},
+		{windows.CERT_SYSTEM_STORE_LOCAL_MACHINE, "TrustedPeople"},
+		{windows.CERT_SYSTEM_STORE_LOCAL_MACHINE, "TrustedPublisher"},
 	}
-	// Ensure the store handle is closed at the end
-	defer windows.CertCloseStore(h, 0)
 
-	var pCertContext *windows.CertContext
-	for {
-		// Enumerate certificates; pass previous context to get next
-		pCertContext, err = windows.CertEnumCertificatesInStore(h, pCertContext)
-		if pCertContext == nil {
-			// No more certificates in the store
-			break
-		}
+	for _, ws := range windowsStores {
+		logger.Infof("Scanning Windows cert store: %s", ws.storeName)
 
-		// Convert encoded certificate bytes to Go slice
-		certBytes := (*[1 << 20]byte)(unsafe.Pointer(pCertContext.EncodedCert))[:pCertContext.Length:pCertContext.Length]
-
-		// Parse the X.509 certificate
-		cert, err := x509.ParseCertificate(certBytes)
+		h, err := windows.CertOpenStore(
+			windows.CERT_STORE_PROV_SYSTEM, 0, 0,
+			windows.CERT_STORE_OPEN_EXISTING_FLAG|windows.CERT_STORE_READONLY_FLAG|ws.systemStore,
+			uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(ws.storeName))),
+		)
 		if err != nil {
-			// Skip invalid certificates
+			logger.Warnf("Could not open Windows cert store %s: %v", ws.storeName, err)
 			continue
 		}
 
-		// Skip self-signed root CAs
-		if !isLikelyDomainCert(cert) {
-			continue
+		var pCertContext *windows.CertContext
+		for {
+			pCertContext, err = windows.CertEnumCertificatesInStore(h, pCertContext)
+			if pCertContext == nil {
+				break
+			}
+
+			certBytes := (*[1 << 20]byte)(unsafe.Pointer(pCertContext.EncodedCert))[:pCertContext.Length:pCertContext.Length]
+
+			cert, err := x509.ParseCertificate(certBytes)
+			if err != nil {
+				logger.Debugf("Skipping invalid cert in %s: %v", ws.storeName, err)
+				continue
+			}
+
+			if !isLikelyDomainCert(cert) {
+				continue
+			}
+
+			ipStrs := []string{}
+			for _, ip := range cert.IPAddresses {
+				ipStrs = append(ipStrs, ip.String())
+			}
+
+			expiringSoon := time.Until(cert.NotAfter) < 30*24*time.Hour
+
+			certInfos = append(certInfos, CertInfo{
+				Subject:      cert.Subject.String(),
+				Issuer:       cert.Issuer.String(),
+				SerialNumber: getSerialHex(cert.SerialNumber),
+				Fingerprint:  getFingerprintSHA256(cert),
+				KeyUsage:     mapKeyUsage(cert.KeyUsage),
+				ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
+				NotBefore:    cert.NotBefore.Format(time.RFC3339),
+				NotAfter:     cert.NotAfter.Format(time.RFC3339),
+				DNSNames:     cert.DNSNames,
+				IPAddresses:  ipStrs,
+				CertPath:     "WINDOWS_STORE:" + ws.storeName, // ✅ accurate store name
+				KeyPath:      WindowsKeyPath,
+				ExpiringSoon: expiringSoon,
+			})
 		}
 
-		// Convert IP addresses to string format
-		ipStrs := []string{}
-		for _, ip := range cert.IPAddresses {
-			ipStrs = append(ipStrs, ip.String())
+		if errClose := windows.CertCloseStore(h, 0); errClose != nil {
+			logger.Warnf("Failed to close store %s: %v", ws.storeName, errClose)
 		}
 
-		// Determine if certificate expires within 30 days
-		expiringSoon := time.Until(cert.NotAfter) < 30*24*time.Hour
-
-		// Append certificate information to the result slice
-		certInfos = append(certInfos, CertInfo{
-			Subject:      cert.Subject.String(),
-			Issuer:       cert.Issuer.String(),
-			SerialNumber: getSerialHex(cert.SerialNumber),
-			Fingerprint:  getFingerprintSHA256(cert),
-			KeyUsage:     mapKeyUsage(cert.KeyUsage),
-			ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
-			NotBefore:    cert.NotBefore.Format(time.RFC3339),
-			NotAfter:     cert.NotAfter.Format(time.RFC3339),
-			DNSNames:     cert.DNSNames,
-			IPAddresses:  ipStrs,
-			CertPath:     "WINDOWS_STORE:MY",  // Indicates source is Windows store
-			KeyPath:      "WINDOWS_STORE_KEY", // Placeholder; actual private key handling may differ
-			ExpiringSoon: expiringSoon,
-		})
+		logger.Debugf("Completed scanning store %s", ws.storeName)
 	}
 
 	return certInfos, nil

@@ -90,14 +90,32 @@ func (l *Logger) log(level string, format string, a ...interface{}) {
 	}
 }
 
-// Infof logs an info-level message
-func (l *Logger) Infof(format string, a ...interface{}) {
-	l.log("INFO", format, a...)
-}
+// Instance-level helpers
+func (l *Logger) Infof(format string, a ...interface{})  { l.log("INFO", format, a...) }
+func (l *Logger) Errorf(format string, a ...interface{}) { l.log("ERROR", format, a...) }
+func (l *Logger) Warnf(format string, a ...interface{})  { l.log("WARN", format, a...) }
+func (l *Logger) Debugf(format string, a ...interface{}) { l.log("DEBUG", format, a...) }
 
-// Errorf logs an error-level message
-func (l *Logger) Errorf(format string, a ...interface{}) {
-	l.log("ERROR", format, a...)
+// Package-level helpers (delegate to globalLogger)
+func Infof(format string, a ...interface{}) {
+	if globalLogger != nil {
+		globalLogger.Infof(format, a...)
+	}
+}
+func Errorf(format string, a ...interface{}) {
+	if globalLogger != nil {
+		globalLogger.Errorf(format, a...)
+	}
+}
+func Warnf(format string, a ...interface{}) {
+	if globalLogger != nil {
+		globalLogger.Warnf(format, a...)
+	}
+}
+func Debugf(format string, a ...interface{}) {
+	if globalLogger != nil {
+		globalLogger.Debugf(format, a...)
+	}
 }
 
 // WriteJSON writes structured payloads to JSON files

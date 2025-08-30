@@ -178,13 +178,13 @@ func guessKeyPath(certPath string) string {
 	baseName := strings.TrimSuffix(base, ext) + ".key"
 
 	// Linux default private key directory
-	linuxPath := filepath.Join("/etc/ssl/private", baseName)
+	linuxPath := filepath.Join("/etc", "ssl", "private", baseName)
 	if fileExists(linuxPath) {
 		return linuxPath
 	}
 
 	// Windows default private key directory
-	winPath := filepath.Join("C:\\ProgramData\\SSL\\Keys", baseName)
+	winPath := filepath.Join("C:", "ProgramData", "SSL", "Keys", baseName)
 	if fileExists(winPath) {
 		return winPath
 	}
