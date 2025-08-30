@@ -8,6 +8,7 @@
     "C:\\Windows\\System32\\certificates"
   ],
   "ScanIntervalSeconds": 5,
+  "ExpiringThresholdDays": 10,
   "LogPath": "../../logs/",
   "Verbose": true,
   "LogLevel": "DEBUG",

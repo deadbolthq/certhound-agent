@@ -18,6 +18,7 @@ import (
 	"time"        // For working with certificate expiration dates
 	"unsafe"      // For converting pointers to byte slices
 
+	"github.com/keelw/certsync-agent/internal/config" // For accessing configuration settings
 	"github.com/keelw/certsync-agent/internal/logger" // For logging
 	"golang.org/x/sys/windows"                        // Windows API bindings for certificate store access
 )
@@ -29,7 +30,7 @@ const WindowsKeyPath = "WINDOWS_STORE_KEY"
 
 // ScanWindowsCertStore scans multiple Windows certificate stores and returns
 // certificates in CertInfo format.
-func ScanWindowsCertStore() ([]CertInfo, error) {
+func ScanWindowsCertStore(cfg *config.Config) ([]CertInfo, error) {
 	var certInfos []CertInfo
 
 	var windowsStores = []struct {
@@ -73,7 +74,12 @@ func ScanWindowsCertStore() ([]CertInfo, error) {
 				logger.Debugf("Skipping invalid cert in %s: %v", ws.storeName, err)
 				continue
 			}
-
+			if !cfg.IncludeSelfSigned {
+				if len(cert.DNSNames) == 0 && !isLikelyDomainCert(cert) {
+					logger.Debugf("Skipping non-domain/self-signed cert in %s: %s", ws.storeName, cert.Subject.String())
+					continue
+				}
+			}
 			if !isLikelyDomainCert(cert) {
 				continue
 			}
@@ -83,7 +89,7 @@ func ScanWindowsCertStore() ([]CertInfo, error) {
 				ipStrs = append(ipStrs, ip.String())
 			}
 
-			expiringSoon := time.Until(cert.NotAfter) < 30*24*time.Hour
+			expiringSoon := time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
 
 			certInfos = append(certInfos, CertInfo{
 				Subject:      cert.Subject.String(),
@@ -106,7 +112,7 @@ func ScanWindowsCertStore() ([]CertInfo, error) {
 			logger.Warnf("Failed to close store %s: %v", ws.storeName, errClose)
 		}
 
-		logger.Debugf("Completed scanning store %s", ws.storeName)
+		logger.Infof("Completed Windows store scan; total certs found: %d", len(certInfos))
 	}
 
 	return certInfos, nil

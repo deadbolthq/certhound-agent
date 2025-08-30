@@ -82,7 +82,7 @@ func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender
 
 	// Loop over all configured scan paths
 	for _, path := range paths {
-		certs, err := scanner.ScanAllCertificates(path)
+		certs, err := scanner.ScanAllCertificates(path, cfg)
 		if err != nil {
 			log.Errorf("Error scanning %s: %v", path, err)
 			continue

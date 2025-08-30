@@ -22,6 +22,9 @@ import (
 	"runtime"       // For detecting operating system
 	"strings"       // For string manipulation
 	"time"          // For working with certificate expiration dates
+
+	"github.com/keelw/certsync-agent/internal/config" // For accessing configuration (e.g. ExpiringThresholdDays)
+	"github.com/keelw/certsync-agent/internal/logger" // For logging
 )
 
 // CertInfo represents a certificate in a JSON-friendly format.
@@ -67,14 +70,17 @@ Returns:
 	[]CertInfo - Slice of certificate information
 	error      - Any error encountered during scanning
 */
-func ScanCertFiles(dir string) ([]CertInfo, error) {
+func ScanCertFiles(dir string, cfg *config.Config) ([]CertInfo, error) {
 	var certInfos []CertInfo
+
+	logger.Infof("Scanning filesystem path: %s", filepath.Clean(dir))
 
 	// WalkDir recursively traverses the directory tree
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// If we can't access a file or directory, return the error
-			return err
+			// Log and continue, don't abort the entire walk
+			logger.Warnf("Cannot access %s: %v", path, err)
+			return nil
 		}
 
 		// Skip directories
@@ -85,7 +91,8 @@ func ScanCertFiles(dir string) ([]CertInfo, error) {
 		// Read the file contents
 		data, err := os.ReadFile(path)
 		if err != nil {
-			// Skip unreadable files silently
+			// unreadable file — debug-level message
+			logger.Debugf("Unreadable file %s: %v", path, err)
 			return nil
 		}
 
@@ -99,49 +106,63 @@ func ScanCertFiles(dir string) ([]CertInfo, error) {
 			}
 
 			// Only process certificate blocks
-			if block.Type == "CERTIFICATE" {
-				cert, err := x509.ParseCertificate(block.Bytes)
-				if err != nil {
-					// Skip invalid certificates
-					continue
-				}
+			if block.Type != "CERTIFICATE" {
+				continue
+			}
 
-				// Skip self-signed root certificates without DNS names
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				// Skip invalid certificates
+				logger.Debugf("Failed to parse certificate in %s: %v", path, err)
+				continue
+			}
+
+			// honor IncludeSelfSigned setting
+			if !cfg.IncludeSelfSigned {
 				if len(cert.DNSNames) == 0 && !isLikelyDomainCert(cert) {
+					logger.Debugf("Skipping non-domain/self-signed cert: %s", cert.Subject.String())
 					continue
 				}
+			}
 
-				// Convert IP addresses to strings
-				ipStrs := []string{}
+			// IPs optionally included
+			ipStrs := []string{}
+			if cfg.IncludeIPAddresses {
 				for _, ip := range cert.IPAddresses {
 					ipStrs = append(ipStrs, ip.String())
 				}
-
-				// Check if the certificate expires within 30 days
-				expiringSoon := time.Until(cert.NotAfter) < 30*24*time.Hour
-
-				// Append a new CertInfo object to the result slice
-				certInfos = append(certInfos, CertInfo{
-					Subject:      cert.Subject.String(),
-					Issuer:       cert.Issuer.String(),
-					SerialNumber: getSerialHex(cert.SerialNumber),
-					Fingerprint:  getFingerprintSHA256(cert),
-					KeyUsage:     mapKeyUsage(cert.KeyUsage),
-					ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
-					NotBefore:    cert.NotBefore.Format(time.RFC3339),
-					NotAfter:     cert.NotAfter.Format(time.RFC3339),
-					DNSNames:     cert.DNSNames,
-					IPAddresses:  ipStrs,
-					CertPath:     path,
-					KeyPath:      guessKeyPath(path),
-					ExpiringSoon: expiringSoon,
-				})
 			}
+
+			// Check if the certificate expires within ExpiringThresholdDays
+			expiringSoon := time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
+
+			// Append a new CertInfo object to the result slice
+			certInfos = append(certInfos, CertInfo{
+				Subject:      cert.Subject.String(),
+				Issuer:       cert.Issuer.String(),
+				SerialNumber: getSerialHex(cert.SerialNumber),
+				Fingerprint:  getFingerprintSHA256(cert),
+				KeyUsage:     mapKeyUsage(cert.KeyUsage),
+				ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
+				NotBefore:    cert.NotBefore.Format(time.RFC3339),
+				NotAfter:     cert.NotAfter.Format(time.RFC3339),
+				DNSNames:     cert.DNSNames,
+				IPAddresses:  ipStrs,
+				CertPath:     path,
+				KeyPath:      guessKeyPath(path),
+				ExpiringSoon: expiringSoon,
+			})
+
 		}
 
 		return nil
 	})
 
+	if err != nil {
+		logger.Errorf("Error walking directory %s: %v", dir, err)
+	}
+
+	logger.Infof("Completed scan of %s, found %d filesystem certs", dir, len(certInfos))
 	return certInfos, err
 }
 
@@ -238,17 +259,20 @@ Returns:
 	[]CertInfo - Slice of all certificates found
 	error      - Any error encountered during scanning
 */
-func ScanAllCertificates(dir string) ([]CertInfo, error) {
+func ScanAllCertificates(dir string, cfg *config.Config) ([]CertInfo, error) {
 	// Scan filesystem first
-	certs, err := ScanCertFiles(dir)
+	certs, err := ScanCertFiles(dir, cfg)
 	if err != nil {
 		return certs, err
 	}
 
-	// If on Windows, scan Windows certificate store as well
+	// If on Windows, scan Windows certificate stores as well
 	if runtime.GOOS == "windows" {
-		winCerts, err := ScanWindowsCertStore() // Assume this function exists elsewhere
-		if err == nil {
+		winCerts, err := ScanWindowsCertStore(cfg)
+		if err != nil {
+			// log but don't fail the overall operation
+			logger.Warnf("Windows cert store scan error: %v", err)
+		} else {
 			certs = append(certs, winCerts...)
 		}
 	}

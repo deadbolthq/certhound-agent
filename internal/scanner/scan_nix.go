@@ -14,6 +14,8 @@ Date: 2025-08-27
 
 package scanner
 
+import "github.com/keelw/certsync-agent/internal/config"
+
 /*
 ScanWindowsCertStore is a stub implementation for non-Windows platforms.
 
@@ -25,6 +27,6 @@ Returns:
 	[]CertInfo - nil, as no certificates are available from a Windows store
 	error      - nil, no error occurs
 */
-func ScanWindowsCertStore() ([]CertInfo, error) {
+func ScanWindowsCertStore(cfg *config.Config) ([]CertInfo, error) {
 	return nil, nil
 }
