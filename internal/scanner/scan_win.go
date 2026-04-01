@@ -84,9 +84,11 @@ func ScanWindowsCertStore(cfg *config.Config) ([]CertInfo, error) {
 				continue
 			}
 
-			ipStrs := []string{}
-			for _, ip := range cert.IPAddresses {
-				ipStrs = append(ipStrs, ip.String())
+			var ipStrs []string
+			if cfg.IncludeIPAddresses {
+				for _, ip := range cert.IPAddresses {
+					ipStrs = append(ipStrs, ip.String())
+				}
 			}
 
 			expiringSoon := time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour

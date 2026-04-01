@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -37,28 +38,63 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
 	}
 
-	// Set sensible defaults if missing
-	// Commented out to allow short scan intervals for testing
-	// if cfg.ScanIntervalSeconds <= 1800 || cfg.ScanIntervalSeconds > 86400 {
-	// 	cfg.ScanIntervalSeconds = 3600 // default 1 hour
-	// }
-	if cfg.ExpiringThresholdDays <= 5 || cfg.ExpiringThresholdDays > 60 {
-		cfg.ExpiringThresholdDays = 10 // default 10 days
+	// Apply defaults for missing or zero values
+	if cfg.ScanIntervalSeconds <= 0 {
+		cfg.ScanIntervalSeconds = 3600
+	}
+	if cfg.ExpiringThresholdDays <= 0 {
+		cfg.ExpiringThresholdDays = 30
 	}
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = 3
 	}
 	if cfg.AgentName == "" {
-		cfg.AgentName = "CertSyncAgent"
+		cfg.AgentName = "certsync-agent"
 	}
 	if cfg.LogLevel == "" {
-		cfg.LogLevel = "ERROR"
+		cfg.LogLevel = "INFO"
 	}
 	if cfg.PayloadVersion == "" {
 		cfg.PayloadVersion = "1.0"
 	}
 
 	return &cfg, nil
+}
+
+// DefaultConfig returns a Config with sensible defaults and OS-appropriate scan paths.
+// Used when no config file is provided.
+func DefaultConfig() *Config {
+	cfg := &Config{
+		ScanIntervalSeconds:   3600,
+		ExpiringThresholdDays: 30,
+		MaxRetries:            3,
+		AgentName:             "certsync-agent",
+		LogLevel:              "INFO",
+		PayloadVersion:        "1.0",
+		TLSVerify:             true,
+		LogPath:               "logs",
+	}
+	switch runtime.GOOS {
+	case "windows":
+		cfg.ScanPathsWindows = []string{
+			`C:\Windows\System32\`,
+			`C:\ProgramData\SSL\`,
+		}
+	case "darwin":
+		cfg.ScanPaths = []string{
+			"/etc/ssl/certs",
+			"/usr/local/share/ca-certificates",
+			"/Library/Keychains",
+		}
+	default:
+		cfg.ScanPaths = []string{
+			"/etc/ssl/certs",
+			"/etc/pki/tls/certs",
+			"/usr/local/share/ca-certificates",
+			"/etc/letsencrypt/live",
+		}
+	}
+	return cfg
 }
 
 // ScanInterval returns the scan interval as a time.Duration
