@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/keelw/certsync-agent/internal/config"
-	"github.com/keelw/certsync-agent/internal/scanner"
+	"github.com/keelw/certhound-agent/internal/config"
+	"github.com/keelw/certhound-agent/internal/scanner"
 )
 
 type Payload struct {

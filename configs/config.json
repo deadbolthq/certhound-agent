@@ -15,7 +15,7 @@
   "AWSEndpoint": "https://example.com/api/certs",
   "TLSVerify": true,
   "MaxRetries": 3,
-  "AgentName": "CertSyncAgent",
+  "AgentName": "CertHoundAgent",
   "IncludeIPAddresses": false,
   "IncludeSelfSigned": false,
   "PayloadVersion": "1.0"

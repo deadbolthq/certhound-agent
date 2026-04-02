@@ -14,7 +14,7 @@ Date: 2025-08-27
 
 package scanner
 
-import "github.com/keelw/certsync-agent/internal/config"
+import "github.com/keelw/certhound-agent/internal/config"
 
 /*
 ScanWindowsCertStore is a stub implementation for non-Windows platforms.

@@ -49,7 +49,7 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.MaxRetries = 3
 	}
 	if cfg.AgentName == "" {
-		cfg.AgentName = "certsync-agent"
+		cfg.AgentName = "certhound-agent"
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "INFO"
@@ -68,7 +68,7 @@ func DefaultConfig() *Config {
 		ScanIntervalSeconds:   3600,
 		ExpiringThresholdDays: 30,
 		MaxRetries:            3,
-		AgentName:             "certsync-agent",
+		AgentName:             "certhound-agent",
 		LogLevel:              "INFO",
 		PayloadVersion:        "1.0",
 		TLSVerify:             true,

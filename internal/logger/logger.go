@@ -123,7 +123,7 @@ func WriteJSON(data interface{}, logDir string) error {
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		os.MkdirAll(logDir, 0755)
 	}
-	filename := filepath.Join(logDir, fmt.Sprintf("certsync_%s.json", time.Now().Format("20060102")))
+	filename := filepath.Join(logDir, fmt.Sprintf("certhound_%s.json", time.Now().Format("20060102")))
 	bytes, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return err

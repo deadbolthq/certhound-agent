@@ -18,8 +18,8 @@ import (
 	"time"        // For working with certificate expiration dates
 	"unsafe"      // For converting pointers to byte slices
 
-	"github.com/keelw/certsync-agent/internal/config" // For accessing configuration settings
-	"github.com/keelw/certsync-agent/internal/logger" // For logging
+	"github.com/keelw/certhound-agent/internal/config" // For accessing configuration settings
+	"github.com/keelw/certhound-agent/internal/logger" // For logging
 	"golang.org/x/sys/windows"                        // Windows API bindings for certificate store access
 )
 

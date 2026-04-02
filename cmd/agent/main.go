@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/keelw/certsync-agent/internal/config"
-	"github.com/keelw/certsync-agent/internal/logger"
-	"github.com/keelw/certsync-agent/internal/payload"
-	"github.com/keelw/certsync-agent/internal/scanner"
-	"github.com/keelw/certsync-agent/internal/sender"
+	"github.com/keelw/certhound-agent/internal/config"
+	"github.com/keelw/certhound-agent/internal/logger"
+	"github.com/keelw/certhound-agent/internal/payload"
+	"github.com/keelw/certhound-agent/internal/scanner"
+	"github.com/keelw/certhound-agent/internal/sender"
 )
 
 const agentVersion = "0.1.0"
@@ -25,23 +25,23 @@ func main() {
 	var (
 		configPath = flag.String("config", "", "Path to config file (optional; flags take precedence)")
 		jsonOut    = flag.Bool("json", false, "Output JSON to stdout instead of a table")
-		endpoint   = flag.String("endpoint", "", "CertSync API endpoint to POST results to")
+		endpoint   = flag.String("endpoint", "", "CertHound API endpoint to POST results to")
 		watchMode  = flag.Bool("watch", false, "Run continuously on the configured scan interval")
 		threshold  = flag.Int("threshold", 0, "Days before expiry to flag as expiring (overrides config)")
 	)
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "CertSync Agent v%s\n\n", agentVersion)
+		fmt.Fprintf(os.Stderr, "CertHound Agent v%s\n\n", agentVersion)
 		fmt.Fprintf(os.Stderr, "Scans for X.509 certificates on this host and reports their status.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage:\n  certsync-agent [flags] [path ...]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n  certhound-agent [flags] [path ...]\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  certsync-agent\n")
-		fmt.Fprintf(os.Stderr, "  certsync-agent /etc/nginx/ssl /home/deploy/certs\n")
-		fmt.Fprintf(os.Stderr, "  certsync-agent --json\n")
-		fmt.Fprintf(os.Stderr, "  certsync-agent --endpoint https://api.certsync.io/v1/ingest\n")
-		fmt.Fprintf(os.Stderr, "  certsync-agent --watch --threshold 30\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent /etc/nginx/ssl /home/deploy/certs\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent --json\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent --endpoint https://api.certhound.dev/v1/ingest\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent --watch --threshold 30\n")
 	}
 	flag.Parse()
 	extraPaths := flag.Args()
@@ -82,7 +82,7 @@ func main() {
 	var log *logger.Logger
 	if *watchMode || cfg.AWSEndpoint != "" {
 		log = logger.NewLogger(cfg.LogPath, cfg.LogLevel, cfg.Verbose)
-		log.Infof("CertSync agent v%s starting on %s/%s", agentVersion, runtime.GOOS, runtime.GOARCH)
+		log.Infof("CertHound agent v%s starting on %s/%s", agentVersion, runtime.GOOS, runtime.GOARCH)
 	}
 
 	// Sender is only needed when an endpoint is configured
@@ -114,7 +114,7 @@ func main() {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Infof("CertSync agent stopped.")
+				log.Infof("CertHound agent stopped.")
 				return
 			case <-ticker.C:
 				runScan(cfg, log, senderClient, *jsonOut)
@@ -199,7 +199,7 @@ func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender
 func printTable(certs []scanner.CertInfo, thresholdDays int) {
 	host, _ := os.Hostname()
 	now := time.Now()
-	fmt.Printf("CertSync Agent v%s — %s — %d certificate(s) found\n\n", agentVersion, host, len(certs))
+	fmt.Printf("CertHound Agent v%s — %s — %d certificate(s) found\n\n", agentVersion, host, len(certs))
 
 	if len(certs) == 0 {
 		fmt.Println("No certificates found in the configured scan paths.")

@@ -1,6 +1,6 @@
-CertSync
+CertHound
 
-CertSync is a cross-platform utility for scanning X.509 certificates on the filesystem and (on Windows) the current user's certificate store. It outputs a JSON-friendly representation of certificates, including details such as subject, issuer, expiration dates, DNS names, IP addresses, and key paths. Certificates nearing expiration are flagged automatically.
+CertHound is a cross-platform utility for scanning X.509 certificates on the filesystem and (on Windows) the current user's certificate store. It outputs a JSON-friendly representation of certificates, including details such as subject, issuer, expiration dates, DNS names, IP addresses, and key paths. Certificates nearing expiration are flagged automatically.
 
 ---
 
@@ -24,8 +24,8 @@ Prerequisites:
 
 Clone the repository:
 
-git clone https://github.com/keelw/certsync-agent.git
-cd certsync
+git clone https://github.com/deadbolthq/certhound-agent.git
+cd certhound-agent
 
 ---
 
@@ -33,13 +33,13 @@ Usage
 
 Run the agent:
 
-go run .
+go run ./cmd/agent
 
-By default, it scans /etc/ssl/certs on Linux/macOS.  
+By default, it scans /etc/ssl/certs on Linux/macOS.
 
 Override the certificate directory:
 
-go run . /path/to/certs
+go run ./cmd/agent /path/to/certs
 
 Output:
 
@@ -78,6 +78,7 @@ Some portions of this project were assisted by large language models (LLMs), inc
 
 - ChatGPT: https://chat.openai.com/
 - GitHub Copilot: https://github.com/features/copilot
+- Claude Code: https://claude.ai/code
 
 These tools helped generate boilerplate code, documentation, and comments.
 

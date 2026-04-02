@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/keelw/certsync-agent/internal/payload"
+	"github.com/keelw/certhound-agent/internal/payload"
 )
 
 type Sender struct {
