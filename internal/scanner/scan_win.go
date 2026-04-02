@@ -18,9 +18,9 @@ import (
 	"time"        // For working with certificate expiration dates
 	"unsafe"      // For converting pointers to byte slices
 
-	"github.com/keelw/certhound-agent/internal/config" // For accessing configuration settings
-	"github.com/keelw/certhound-agent/internal/logger" // For logging
-	"golang.org/x/sys/windows"                        // Windows API bindings for certificate store access
+	"github.com/deadbolthq/certhound-agent/internal/config" // For accessing configuration settings
+	"github.com/deadbolthq/certhound-agent/internal/logger" // For logging
+	"golang.org/x/sys/windows"                              // Windows API bindings for certificate store access
 )
 
 // WindowsKeyPath is a placeholder string for private key locations.

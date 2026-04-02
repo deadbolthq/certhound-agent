@@ -23,8 +23,8 @@ import (
 	"strings"       // For string manipulation
 	"time"          // For working with certificate expiration dates
 
-	"github.com/keelw/certhound-agent/internal/config" // For accessing configuration (e.g. ExpiringThresholdDays)
-	"github.com/keelw/certhound-agent/internal/logger" // For logging
+	"github.com/deadbolthq/certhound-agent/internal/config" // For accessing configuration (e.g. ExpiringThresholdDays)
+	"github.com/deadbolthq/certhound-agent/internal/logger" // For logging
 )
 
 // CertInfo represents a certificate in a JSON-friendly format.

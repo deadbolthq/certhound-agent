@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/keelw/certhound-agent/internal/config"
-	"github.com/keelw/certhound-agent/internal/logger"
-	"github.com/keelw/certhound-agent/internal/payload"
-	"github.com/keelw/certhound-agent/internal/scanner"
-	"github.com/keelw/certhound-agent/internal/sender"
+	"github.com/deadbolthq/certhound-agent/internal/config"
+	"github.com/deadbolthq/certhound-agent/internal/logger"
+	"github.com/deadbolthq/certhound-agent/internal/payload"
+	"github.com/deadbolthq/certhound-agent/internal/scanner"
+	"github.com/deadbolthq/certhound-agent/internal/sender"
 )
 
 const agentVersion = "0.1.0"
