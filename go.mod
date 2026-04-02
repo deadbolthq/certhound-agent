@@ -1,4 +1,4 @@
-module github.com/keelw/certhound-agent
+module github.com/deadbolthq/certhound-agent
 
 go 1.25.0
 
