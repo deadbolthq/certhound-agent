@@ -19,7 +19,8 @@ import (
 	"github.com/deadbolthq/certhound-agent/internal/sender"
 )
 
-const agentVersion = "0.1.0"
+// version is injected at build time via: -ldflags "-X main.version=x.y.z"
+var version = "dev"
 
 func main() {
 	var (
@@ -31,7 +32,7 @@ func main() {
 	)
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "CertHound Agent v%s\n\n", agentVersion)
+		fmt.Fprintf(os.Stderr, "CertHound Agent v%s\n\n", version)
 		fmt.Fprintf(os.Stderr, "Scans for X.509 certificates on this host and reports their status.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n  certhound-agent [flags] [path ...]\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
@@ -82,7 +83,8 @@ func main() {
 	var log *logger.Logger
 	if *watchMode || cfg.AWSEndpoint != "" {
 		log = logger.NewLogger(cfg.LogPath, cfg.LogLevel, cfg.Verbose)
-		log.Infof("CertHound agent v%s starting on %s/%s", agentVersion, runtime.GOOS, runtime.GOARCH)
+		log.Infof("CertHound agent v%s starting on %s/%s", version, runtime.GOOS, runtime.GOARCH)
+		defer log.Close()
 	}
 
 	// Sender is only needed when an endpoint is configured
@@ -105,7 +107,7 @@ func main() {
 			cancel()
 		}()
 
-		runScan(cfg, log, senderClient, *jsonOut)
+		runScan(ctx, cfg, log, senderClient, *jsonOut)
 
 		ticker := time.NewTicker(cfg.ScanInterval())
 		defer ticker.Stop()
@@ -117,15 +119,15 @@ func main() {
 				log.Infof("CertHound agent stopped.")
 				return
 			case <-ticker.C:
-				runScan(cfg, log, senderClient, *jsonOut)
+				runScan(ctx, cfg, log, senderClient, *jsonOut)
 			}
 		}
 	} else {
-		runScan(cfg, log, senderClient, *jsonOut)
+		runScan(context.Background(), cfg, log, senderClient, *jsonOut)
 	}
 }
 
-func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, jsonOut bool) {
+func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, jsonOut bool) {
 	if log != nil {
 		log.Infof("Starting certificate scan...")
 	}
@@ -166,7 +168,7 @@ func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender
 
 	// Output
 	if jsonOut {
-		pl := payload.NewPayload(allCerts, cfg, agentVersion)
+		pl := payload.NewPayload(allCerts, cfg, version)
 		data, err := json.MarshalIndent(pl, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error marshalling JSON: %v\n", err)
@@ -179,8 +181,8 @@ func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender
 
 	// Send to endpoint if configured
 	if senderClient != nil {
-		pl := payload.NewPayload(allCerts, cfg, agentVersion)
-		if err := senderClient.Send(pl); err != nil {
+		pl := payload.NewPayload(allCerts, cfg, version)
+		if err := senderClient.Send(ctx, pl); err != nil {
 			if log != nil {
 				log.Errorf("Error sending payload: %v", err)
 			} else {
@@ -199,7 +201,7 @@ func runScan(cfg *config.Config, log *logger.Logger, senderClient *sender.Sender
 func printTable(certs []scanner.CertInfo, thresholdDays int) {
 	host, _ := os.Hostname()
 	now := time.Now()
-	fmt.Printf("CertHound Agent v%s — %s — %d certificate(s) found\n\n", agentVersion, host, len(certs))
+	fmt.Printf("CertHound Agent v%s — %s — %d certificate(s) found\n\n", version, host, len(certs))
 
 	if len(certs) == 0 {
 		fmt.Println("No certificates found in the configured scan paths.")

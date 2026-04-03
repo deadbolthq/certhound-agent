@@ -2,6 +2,7 @@ package sender
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -34,16 +35,18 @@ func NewSender(endpoint string, tlsVerify bool, maxRetries int) *Sender {
 	}
 }
 
-// Send sends the payload to the configured endpoint with retries
-func (s *Sender) Send(pl *payload.Payload) error {
+// Send sends the payload to the configured endpoint with exponential backoff retries.
+// The context is honoured during waits — cancelling it aborts immediately.
+func (s *Sender) Send(ctx context.Context, pl *payload.Payload) error {
 	data, err := json.Marshal(pl)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
+	backoff := time.Second
 	var lastErr error
 	for i := 0; i <= s.maxRetries; i++ {
-		req, err := http.NewRequest("POST", s.endpoint, bytes.NewBuffer(data))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewBuffer(data))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -52,16 +55,21 @@ func (s *Sender) Send(pl *payload.Payload) error {
 		resp, err := s.httpClient.Do(req)
 		if err != nil {
 			lastErr = err
-			time.Sleep(time.Second * 2) // backoff
-			continue
+		} else {
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return nil
+			}
+			lastErr = fmt.Errorf("server returned status %d", resp.StatusCode)
 		}
 
-		resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil
-		} else {
-			lastErr = fmt.Errorf("server returned status %d", resp.StatusCode)
-			time.Sleep(time.Second * 2)
+		if i < s.maxRetries {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff *= 2
 		}
 	}
 

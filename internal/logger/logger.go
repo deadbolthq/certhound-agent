@@ -30,6 +30,23 @@ const (
 // Singleton instance
 var globalLogger *Logger
 
+// Close flushes and closes the underlying log file. Safe to call multiple times.
+func (l *Logger) Close() {
+	if l.logFile != nil {
+		l.logFile.Close()
+		l.logFile = nil
+	}
+}
+
+// ResetForTest tears down the global logger so tests can reinitialise it cleanly.
+// Must not be called in production code.
+func ResetForTest() {
+	if globalLogger != nil {
+		globalLogger.Close()
+		globalLogger = nil
+	}
+}
+
 // NewLogger initializes the logger
 func NewLogger(logDir string, level string, verbose bool) *Logger {
 	if globalLogger != nil {

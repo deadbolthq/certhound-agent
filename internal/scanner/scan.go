@@ -15,6 +15,7 @@ import (
 	"encoding/hex"  // For encoding fingerprints as hex strings
 	"encoding/json" // For JSON marshaling
 	"encoding/pem"  // For decoding PEM blocks
+	"fmt"           // For error formatting
 	"io/fs"         // For file system directory walking
 	"math/big"      // For handling big integers (serial numbers
 	"os"            // For reading files and checking existence
@@ -72,6 +73,10 @@ Returns:
 */
 func ScanCertFiles(dir string, cfg *config.Config) ([]CertInfo, error) {
 	var certInfos []CertInfo
+
+	if _, err := os.Stat(dir); err != nil {
+		return nil, fmt.Errorf("scan path unavailable %q: %w", dir, err)
+	}
 
 	logger.Infof("Scanning filesystem path: %s", filepath.Clean(dir))
 

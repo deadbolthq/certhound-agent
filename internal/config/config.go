@@ -57,6 +57,9 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.PayloadVersion == "" {
 		cfg.PayloadVersion = "1.0"
 	}
+	if cfg.LogPath == "" {
+		cfg.LogPath = "logs"
+	}
 
 	return &cfg, nil
 }
