@@ -26,6 +26,7 @@ func main() {
 	var (
 		configPath = flag.String("config", "", "Path to config file (optional; flags take precedence)")
 		endpoint   = flag.String("endpoint", "", "CertHound API endpoint to POST results to")
+		apiKeyFile = flag.String("api-key-file", "", "Path to file containing the API key")
 		watchMode  = flag.Bool("watch", false, "Run continuously on the configured scan interval")
 		threshold  = flag.Int("threshold", 0, "Days before expiry to flag as expiring (overrides config)")
 	)
@@ -90,6 +91,13 @@ func main() {
 	// Sender is only needed when an endpoint is configured
 	var senderClient *sender.Sender
 	if cfg.AWSEndpoint != "" {
+		apiKey, err := config.ResolveAPIKey(*apiKeyFile)
+		if err != nil {
+			log.Errorf("Endpoint configured but no API key available.")
+			fmt.Fprintf(os.Stderr, "\n%v\n", err)
+			os.Exit(1)
+		}
+		cfg.APIKey = apiKey
 		senderClient = sender.NewSender(cfg.AWSEndpoint, cfg.APIKey, cfg.TLSVerify, cfg.MaxRetries)
 		log.Infof("Sender initialized for endpoint: %s", cfg.AWSEndpoint)
 	}

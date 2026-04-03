@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -18,7 +19,7 @@ type Config struct {
 	Verbose               bool     `json:"Verbose"`
 	LogLevel              string   `json:"LogLevel"`
 	AWSEndpoint              string   `json:"AWSEndpoint"`
-	APIKey                   string   `json:"APIKey"`
+	APIKey                   string   `json:"-"` // Never read from config JSON — use env var or key file
 	TLSVerify                bool     `json:"TLSVerify"`
 	MaxRetries               int      `json:"MaxRetries"`
 	AgentName                string   `json:"AgentName"`
@@ -42,6 +43,80 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// ResolveAPIKey searches for the API key in the following order:
+//
+//  1. CERTHOUND_API_KEY environment variable
+//  2. Explicit key file path (from --api-key-file flag)
+//  3. Platform-specific default key file locations:
+//     - Linux/macOS: /etc/certhound/api.key, ~/.certhound/api.key
+//     - Windows:     C:\ProgramData\CertHound\api.key, %USERPROFILE%\.certhound\api.key
+//
+// Returns an error describing all locations checked if no key is found.
+func ResolveAPIKey(explicitPath string) (string, error) {
+	// 1. Environment variable (highest priority)
+	if key := os.Getenv("CERTHOUND_API_KEY"); key != "" {
+		return strings.TrimSpace(key), nil
+	}
+
+	// 2. Explicit key file path from flag
+	if explicitPath != "" {
+		key, err := readKeyFile(explicitPath)
+		if err != nil {
+			return "", fmt.Errorf("could not read API key file %q: %w", explicitPath, err)
+		}
+		return key, nil
+	}
+
+	// 3. Platform-specific default locations
+	candidates := defaultKeyFilePaths()
+	for _, path := range candidates {
+		if key, err := readKeyFile(path); err == nil {
+			return key, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"no API key found. Provide one using any of these methods:\n\n"+
+			"  1. Environment variable:\n"+
+			"       export CERTHOUND_API_KEY=your-key-here\n\n"+
+			"  2. Key file (flag):\n"+
+			"       certhound-agent --api-key-file /path/to/api.key\n\n"+
+			"  3. Key file (default location):\n"+
+			"       %s\n"+
+			"       File should contain the API key as a single line, nothing else.\n",
+		candidates[0],
+	)
+}
+
+func readKeyFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	key := strings.TrimSpace(string(data))
+	if key == "" {
+		return "", fmt.Errorf("key file %q is empty", path)
+	}
+	return key, nil
+}
+
+func defaultKeyFilePaths() []string {
+	switch runtime.GOOS {
+	case "windows":
+		paths := []string{`C:\ProgramData\CertHound\api.key`}
+		if home := os.Getenv("USERPROFILE"); home != "" {
+			paths = append(paths, home+`\.certhound\api.key`)
+		}
+		return paths
+	default:
+		paths := []string{"/etc/certhound/api.key"}
+		if home := os.Getenv("HOME"); home != "" {
+			paths = append(paths, home+"/.certhound/api.key")
+		}
+		return paths
+	}
 }
 
 // DefaultConfig returns a Config with sensible defaults and OS-appropriate scan paths.

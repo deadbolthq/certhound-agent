@@ -13,7 +13,7 @@
   "LogPath": "../../logs/",
   "Verbose": true,
   "LogLevel": "DEBUG",
-  "AWSEndpoint": "https://example.com/api/certs",
+  "AWSEndpoint": "",
   "TLSVerify": true,
   "MaxRetries": 3,
   "AgentName": "CertHoundAgent",
