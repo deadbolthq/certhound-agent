@@ -85,6 +85,40 @@ func TestSend_ContextCancellation(t *testing.T) {
 	}
 }
 
+func TestSend_APIKeyHeader(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	s := NewSender(srv.URL, "my-secret-key", true, 0)
+	if err := s.Send(context.Background(), testPayload()); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if gotAuth != "Bearer my-secret-key" {
+		t.Errorf("Authorization header: got %q, want %q", gotAuth, "Bearer my-secret-key")
+	}
+}
+
+func TestSend_NoAPIKeyHeader(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	s := NewSender(srv.URL, "", true, 0)
+	if err := s.Send(context.Background(), testPayload()); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if gotAuth != "" {
+		t.Errorf("Authorization header should be absent when no API key set, got %q", gotAuth)
+	}
+}
+
 func TestSend_BadEndpoint(t *testing.T) {
 	s := NewSender("http://127.0.0.1:1", "", true, 0)
 	err := s.Send(context.Background(), testPayload())

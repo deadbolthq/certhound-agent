@@ -55,6 +55,7 @@ type CertInfo struct {
 	CertPath     string   `json:"cert_path"`
 	KeyPath      string   `json:"key_path"`
 	ExpiringSoon bool     `json:"expiring_soon"`
+	Expired      bool     `json:"expired"`
 }
 
 /*
@@ -138,8 +139,9 @@ func ScanCertFiles(dir string, cfg *config.Config) ([]CertInfo, error) {
 				}
 			}
 
-			// Check if the certificate expires within ExpiringThresholdDays
-			expiringSoon := time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
+			now := time.Now()
+			expired := cert.NotAfter.Before(now)
+			expiringSoon := !expired && time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
 
 			// Append a new CertInfo object to the result slice
 			certInfos = append(certInfos, CertInfo{
@@ -156,6 +158,7 @@ func ScanCertFiles(dir string, cfg *config.Config) ([]CertInfo, error) {
 				CertPath:     path,
 				KeyPath:      guessKeyPath(path),
 				ExpiringSoon: expiringSoon,
+				Expired:      expired,
 			})
 
 		}

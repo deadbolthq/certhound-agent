@@ -42,6 +42,9 @@ func TestNewPayload_Fields(t *testing.T) {
 	if len(pl.Certificates) != 1 {
 		t.Errorf("expected 1 certificate, got %d", len(pl.Certificates))
 	}
+	if pl.AgentID != "test-agent-id" {
+		t.Errorf("AgentID: got %q, want %q", pl.AgentID, "test-agent-id")
+	}
 }
 
 func TestNewPayload_TimestampFormat(t *testing.T) {

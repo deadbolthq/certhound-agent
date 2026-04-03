@@ -97,6 +97,28 @@ func TestResetForTest_AllowsReinit(t *testing.T) {
 }
 
 
+func TestLogger_LogLineFormat(t *testing.T) {
+	l, dir := newTestLogger(t, "INFO", false)
+	l.Infof("format check")
+
+	logFile := findLogFile(t, dir)
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := string(content)
+	if !strings.Contains(line, "[INFO]") {
+		t.Errorf("log line missing [INFO] level tag: %q", line)
+	}
+	if !strings.Contains(line, "format check") {
+		t.Errorf("log line missing message: %q", line)
+	}
+	// Timestamp format: "2006-01-02 15:04:05"
+	if len(line) < 19 || line[4] != '-' || line[7] != '-' || line[10] != ' ' {
+		t.Errorf("log line does not start with expected timestamp format: %q", line)
+	}
+}
+
 func findLogFile(t *testing.T, dir string) string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)

@@ -265,6 +265,25 @@ func TestScanCertFiles_NonexistentDir(t *testing.T) {
 	}
 }
 
+func TestScanCertFiles_ExpiredCert(t *testing.T) {
+	dir := t.TempDir()
+	pemBytes := generateCert(t, pkix.Name{CommonName: "expired.example.com"}, []string{"expired.example.com"}, time.Now().Add(-24*time.Hour))
+	writePEM(t, dir, "expired.pem", pemBytes)
+
+	cfg := defaultCfg()
+	cfg.IncludeSelfSigned = true
+	certs, err := ScanCertFiles(dir, cfg)
+	if err != nil {
+		t.Fatalf("ScanCertFiles: %v", err)
+	}
+	if len(certs) != 1 {
+		t.Fatalf("expected 1 cert, got %d", len(certs))
+	}
+	if !certs[0].Expired {
+		t.Error("cert with NotAfter in the past should have Expired=true")
+	}
+}
+
 func TestScanCertFiles_FingerprintPresent(t *testing.T) {
 	dir := t.TempDir()
 	pemBytes := generateCert(t, pkix.Name{CommonName: "fp.example.com"}, []string{"fp.example.com"}, time.Now().Add(90*24*time.Hour))
