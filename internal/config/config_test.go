@@ -139,6 +139,38 @@ func TestLoadConfig_ExplicitValues(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_InheritsScanPaths(t *testing.T) {
+	// Empty config file should still have OS-appropriate scan paths from DefaultConfig
+	path := writeConfigFile(t, map[string]any{})
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	switch runtime.GOOS {
+	case "windows":
+		if len(cfg.ScanPathsWindows) == 0 {
+			t.Error("ScanPathsWindows should be inherited from defaults when not set in config")
+		}
+	default:
+		if len(cfg.ScanPaths) == 0 {
+			t.Error("ScanPaths should be inherited from defaults when not set in config")
+		}
+	}
+}
+
+func TestLoadConfig_ExplicitScanPathsOverride(t *testing.T) {
+	path := writeConfigFile(t, map[string]any{
+		"ScanPaths": []string{"/custom/path"},
+	})
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if len(cfg.ScanPaths) != 1 || cfg.ScanPaths[0] != "/custom/path" {
+		t.Errorf("ScanPaths: got %v, want [/custom/path]", cfg.ScanPaths)
+	}
+}
+
 func TestLoadConfig_InvalidJSON(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "bad*.json")
 	if err != nil {

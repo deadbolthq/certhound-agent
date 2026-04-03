@@ -19,7 +19,7 @@ func TestNewPayload_Fields(t *testing.T) {
 		{Subject: "CN=example.com", DNSNames: []string{"example.com"}},
 	}
 
-	pl := NewPayload(certs, cfg, "1.2.3")
+	pl := NewPayload(certs, cfg, "1.2.3", "test-agent-id")
 
 	if pl.AgentName != "test-agent" {
 		t.Errorf("AgentName: got %q", pl.AgentName)
@@ -46,7 +46,7 @@ func TestNewPayload_Fields(t *testing.T) {
 
 func TestNewPayload_TimestampFormat(t *testing.T) {
 	cfg := &config.Config{AgentName: "a", PayloadVersion: "1.0"}
-	pl := NewPayload(nil, cfg, "dev")
+	pl := NewPayload(nil, cfg, "dev", "test-agent-id")
 
 	_, err := time.Parse(time.RFC3339, pl.Timestamp)
 	if err != nil {
@@ -56,7 +56,7 @@ func TestNewPayload_TimestampFormat(t *testing.T) {
 
 func TestNewPayload_EmptyCerts(t *testing.T) {
 	cfg := &config.Config{AgentName: "a", PayloadVersion: "1.0"}
-	pl := NewPayload(nil, cfg, "dev")
+	pl := NewPayload(nil, cfg, "dev", "test-agent-id")
 	if pl.Certificates != nil {
 		t.Errorf("expected nil Certificates slice for nil input, got %v", pl.Certificates)
 	}

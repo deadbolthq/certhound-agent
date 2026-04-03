@@ -14,12 +14,13 @@ import (
 
 type Sender struct {
 	endpoint   string
+	apiKey     string
 	httpClient *http.Client
 	maxRetries int
 }
 
 // NewSender initializes a sender with TLS verification and retries
-func NewSender(endpoint string, tlsVerify bool, maxRetries int) *Sender {
+func NewSender(endpoint string, apiKey string, tlsVerify bool, maxRetries int) *Sender {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: !tlsVerify},
 	}
@@ -30,6 +31,7 @@ func NewSender(endpoint string, tlsVerify bool, maxRetries int) *Sender {
 
 	return &Sender{
 		endpoint:   endpoint,
+		apiKey:     apiKey,
 		httpClient: client,
 		maxRetries: maxRetries,
 	}
@@ -51,6 +53,9 @@ func (s *Sender) Send(ctx context.Context, pl *payload.Payload) error {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
+			if s.apiKey != "" {
+				req.Header.Set("Authorization", "Bearer "+s.apiKey)
+			}
 
 		resp, err := s.httpClient.Do(req)
 		if err != nil {

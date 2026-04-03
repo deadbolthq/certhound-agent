@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/deadbolthq/certhound-agent/internal/config"
+	"github.com/deadbolthq/certhound-agent/internal/identity"
 	"github.com/deadbolthq/certhound-agent/internal/logger"
 	"github.com/deadbolthq/certhound-agent/internal/payload"
 	"github.com/deadbolthq/certhound-agent/internal/scanner"
@@ -79,14 +80,16 @@ func main() {
 		cfg.ScanPathsWindows = extraPaths
 	}
 
+	agentID := identity.GetOrCreate()
+
 	log := logger.NewLogger(cfg.LogPath, cfg.LogLevel, cfg.Verbose)
-	log.Infof("CertHound agent v%s starting on %s/%s", version, runtime.GOOS, runtime.GOARCH)
+	log.Infof("CertHound agent v%s starting on %s/%s (id: %s)", version, runtime.GOOS, runtime.GOARCH, agentID)
 	defer log.Close()
 
 	// Sender is only needed when an endpoint is configured
 	var senderClient *sender.Sender
 	if cfg.AWSEndpoint != "" {
-		senderClient = sender.NewSender(cfg.AWSEndpoint, cfg.TLSVerify, cfg.MaxRetries)
+		senderClient = sender.NewSender(cfg.AWSEndpoint, cfg.APIKey, cfg.TLSVerify, cfg.MaxRetries)
 		log.Infof("Sender initialized for endpoint: %s", cfg.AWSEndpoint)
 	}
 
@@ -101,7 +104,7 @@ func main() {
 			cancel()
 		}()
 
-		runScan(ctx, cfg, log, senderClient)
+		runScan(ctx, cfg, log, senderClient, agentID)
 
 		ticker := time.NewTicker(cfg.ScanInterval())
 		defer ticker.Stop()
@@ -113,15 +116,15 @@ func main() {
 				log.Infof("CertHound agent stopped.")
 				return
 			case <-ticker.C:
-				runScan(ctx, cfg, log, senderClient)
+				runScan(ctx, cfg, log, senderClient, agentID)
 			}
 		}
 	} else {
-		runScan(context.Background(), cfg, log, senderClient)
+		runScan(context.Background(), cfg, log, senderClient, agentID)
 	}
 }
 
-func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender) {
+func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string) {
 	log.Infof("Starting certificate scan...")
 
 	// Collect certs from filesystem paths
@@ -154,7 +157,7 @@ func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, sender
 
 	// Send to endpoint if configured
 	if senderClient != nil {
-		pl := payload.NewPayload(allCerts, cfg, version)
+		pl := payload.NewPayload(allCerts, cfg, version, agentID)
 		if err := senderClient.Send(ctx, pl); err != nil {
 			log.Errorf("Error sending payload: %v", err)
 		} else {

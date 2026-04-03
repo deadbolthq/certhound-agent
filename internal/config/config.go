@@ -18,6 +18,7 @@ type Config struct {
 	Verbose               bool     `json:"Verbose"`
 	LogLevel              string   `json:"LogLevel"`
 	AWSEndpoint           string   `json:"AWSEndpoint"`
+	APIKey                string   `json:"APIKey"`
 	TLSVerify             bool     `json:"TLSVerify"`
 	MaxRetries            int      `json:"MaxRetries"`
 	AgentName             string   `json:"AgentName"`

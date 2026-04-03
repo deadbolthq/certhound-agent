@@ -14,7 +14,7 @@ import (
 
 func testPayload() *payload.Payload {
 	cfg := &config.Config{AgentName: "test", PayloadVersion: "1.0"}
-	return payload.NewPayload(nil, cfg, "dev")
+	return payload.NewPayload(nil, cfg, "dev", "test-agent-id")
 }
 
 func TestSend_Success(t *testing.T) {
@@ -29,7 +29,7 @@ func TestSend_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, true, 0)
+	s := NewSender(srv.URL, "", true, 0)
 	if err := s.Send(context.Background(), testPayload()); err != nil {
 		t.Errorf("Send: unexpected error: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestSend_ServerError_Retries(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSender(srv.URL, true, 2)
+	s := NewSender(srv.URL, "", true, 2)
 	err := s.Send(context.Background(), testPayload())
 	if err == nil {
 		t.Error("expected error after exhausted retries")
@@ -64,7 +64,7 @@ func TestSend_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	s := NewSender(srv.URL, true, 5)
+	s := NewSender(srv.URL, "", true, 5)
 	// Cancel after a short delay so the first attempt completes but the backoff wait is interrupted.
 	go func() {
 		time.Sleep(50 * time.Millisecond)
@@ -86,7 +86,7 @@ func TestSend_ContextCancellation(t *testing.T) {
 }
 
 func TestSend_BadEndpoint(t *testing.T) {
-	s := NewSender("http://127.0.0.1:1", true, 0)
+	s := NewSender("http://127.0.0.1:1", "", true, 0)
 	err := s.Send(context.Background(), testPayload())
 	if err == nil {
 		t.Error("expected error for unreachable endpoint")

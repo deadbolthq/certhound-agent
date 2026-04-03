@@ -10,6 +10,7 @@ import (
 )
 
 type Payload struct {
+	AgentID        string             `json:"agent_id"`
 	Host           string             `json:"host"`
 	OS             string             `json:"os"`
 	AgentName      string             `json:"agent_name"`
@@ -21,9 +22,10 @@ type Payload struct {
 }
 
 // NewPayload builds a payload with metadata + certs
-func NewPayload(certs []scanner.CertInfo, cfg *config.Config, agentVersion string) *Payload {
+func NewPayload(certs []scanner.CertInfo, cfg *config.Config, agentVersion string, agentID string) *Payload {
 	host, _ := os.Hostname()
 	return &Payload{
+		AgentID:        agentID,
 		Host:           host,
 		OS:             runtime.GOOS,
 		AgentName:      cfg.AgentName,
