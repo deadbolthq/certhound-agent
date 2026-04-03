@@ -96,17 +96,6 @@ func TestResetForTest_AllowsReinit(t *testing.T) {
 	}
 }
 
-func TestWriteJSON(t *testing.T) {
-	dir := t.TempDir()
-	data := map[string]string{"key": "value"}
-	if err := WriteJSON(data, dir); err != nil {
-		t.Fatalf("WriteJSON: %v", err)
-	}
-	entries, _ := os.ReadDir(dir)
-	if len(entries) == 0 {
-		t.Error("WriteJSON should create a JSON file")
-	}
-}
 
 func findLogFile(t *testing.T, dir string) string {
 	t.Helper()

@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,15 +16,6 @@ type Logger struct {
 	verbose   bool
 }
 
-// Colors for terminal output/logs
-const (
-	ColorReset  = "\033[0m"
-	ColorRed    = "\033[31m"
-	ColorGreen  = "\033[32m"
-	ColorYellow = "\033[33m"
-	ColorBlue   = "\033[34m"
-	ColorPurple = "\033[35m"
-)
 
 // Singleton instance
 var globalLogger *Logger
@@ -84,22 +74,8 @@ func (l *Logger) log(level string, format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	line := fmt.Sprintf("%s [%s] %s\n", timestamp, level, msg)
 
-	var colored string
-	switch level {
-	case "INFO":
-		colored = ColorGreen + line + ColorReset
-	case "ERROR":
-		colored = ColorRed + line + ColorReset
-	case "DEBUG":
-		colored = ColorBlue + line + ColorReset
-	case "WARN":
-		colored = ColorYellow + line + ColorReset
-	default:
-		colored = line
-	}
-
-	// Print to console
-	fmt.Print(colored)
+	// Print to console (plain — ANSI codes pollute service logs)
+	fmt.Print(line)
 
 	// Also write to file if available (in plain color text)
 	if l.writeFile && l.logFile != nil {
@@ -135,15 +111,3 @@ func Debugf(format string, a ...interface{}) {
 	}
 }
 
-// WriteJSON writes structured payloads to JSON files
-func WriteJSON(data interface{}, logDir string) error {
-	if _, err := os.Stat(logDir); os.IsNotExist(err) {
-		os.MkdirAll(logDir, 0755)
-	}
-	filename := filepath.Join(logDir, fmt.Sprintf("certhound_%s.json", time.Now().Format("20060102")))
-	bytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filename, bytes, 0644)
-}

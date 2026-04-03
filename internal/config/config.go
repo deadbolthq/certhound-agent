@@ -58,7 +58,11 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.PayloadVersion = "1.0"
 	}
 	if cfg.LogPath == "" {
-		cfg.LogPath = "logs"
+		if runtime.GOOS == "windows" {
+			cfg.LogPath = `C:\ProgramData\CertHound\logs`
+		} else {
+			cfg.LogPath = "/var/log/certhound"
+		}
 	}
 
 	return &cfg, nil
@@ -75,21 +79,23 @@ func DefaultConfig() *Config {
 		LogLevel:              "INFO",
 		PayloadVersion:        "1.0",
 		TLSVerify:             true,
-		LogPath:               "logs",
 	}
 	switch runtime.GOOS {
 	case "windows":
+		cfg.LogPath = `C:\ProgramData\CertHound\logs`
 		cfg.ScanPathsWindows = []string{
 			`C:\Windows\System32\`,
 			`C:\ProgramData\SSL\`,
 		}
 	case "darwin":
+		cfg.LogPath = "/var/log/certhound"
 		cfg.ScanPaths = []string{
 			"/etc/ssl/certs",
 			"/usr/local/share/ca-certificates",
 			"/Library/Keychains",
 		}
 	default:
+		cfg.LogPath = "/var/log/certhound"
 		cfg.ScanPaths = []string{
 			"/etc/ssl/certs",
 			"/etc/pki/tls/certs",
