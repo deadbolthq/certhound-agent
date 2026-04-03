@@ -33,39 +33,12 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	cfg := DefaultConfig()
+	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
 	}
 
-	// Apply defaults for missing or zero values
-	if cfg.ScanIntervalSeconds <= 0 {
-		cfg.ScanIntervalSeconds = 3600
-	}
-	if cfg.ExpiringThresholdDays <= 0 {
-		cfg.ExpiringThresholdDays = 30
-	}
-	if cfg.MaxRetries == 0 {
-		cfg.MaxRetries = 3
-	}
-	if cfg.AgentName == "" {
-		cfg.AgentName = "certhound-agent"
-	}
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "INFO"
-	}
-	if cfg.PayloadVersion == "" {
-		cfg.PayloadVersion = "1.0"
-	}
-	if cfg.LogPath == "" {
-		if runtime.GOOS == "windows" {
-			cfg.LogPath = `C:\ProgramData\CertHound\logs`
-		} else {
-			cfg.LogPath = "/var/log/certhound"
-		}
-	}
-
-	return &cfg, nil
+	return cfg, nil
 }
 
 // DefaultConfig returns a Config with sensible defaults and OS-appropriate scan paths.

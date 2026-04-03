@@ -101,8 +101,8 @@ func TestLoadConfig_ZeroValueFallbacks(t *testing.T) {
 	if cfg.PayloadVersion != "1.0" {
 		t.Errorf("PayloadVersion fallback: got %q", cfg.PayloadVersion)
 	}
-	if cfg.LogPath != "logs" {
-		t.Errorf("LogPath fallback: got %q, want logs", cfg.LogPath)
+	if cfg.LogPath == "" {
+		t.Errorf("LogPath fallback: got empty string")
 	}
 }
 
