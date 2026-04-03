@@ -22,6 +22,10 @@ config.json
 *.swp
 *.swo
 *~
+*.local.json
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store
