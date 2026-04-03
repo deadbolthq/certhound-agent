@@ -1,89 +1,112 @@
-CertHound
+# CertHound Agent
 
-CertHound is a cross-platform utility for scanning X.509 certificates on the filesystem and (on Windows) the current user's certificate store. It outputs a JSON-friendly representation of certificates, including details such as subject, issuer, expiration dates, DNS names, IP addresses, and key paths. Certificates nearing expiration are flagged automatically.
+A cross-platform Go agent that scans X.509 certificates from the filesystem and Windows certificate stores, then reports their status to the CertHound API. Designed for continuous monitoring with configurable scan intervals, heartbeat check-ins, and file-change detection.
 
----
+## Features
 
-Features
+- Scans directories for PEM/CRT certificates on Linux, macOS, and Windows
+- Enumerates Windows certificate stores (Current User and Local Machine: MY, ROOT, CA, TrustedPeople, TrustedPublisher)
+- Flags certificates that are expired or expiring within a configurable threshold
+- Sends structured JSON payloads to a remote API endpoint with retry logic
+- **Watch mode**: continuous operation with daily scans, hourly heartbeats, and file-change triggered scans via fsnotify
+- Computes SHA-256 fingerprints, extracts SANs, key usage, OCSP/CRL URLs, and more
 
-- Scans directories for PEM/CRT certificates on Linux, macOS, and Windows.
-- Optionally scans the Windows "MY" certificate store.
-- Filters out self-signed root CA certificates.
-- Flags certificates that expire within 30 days.
-- Outputs JSON for easy integration with other tools or dashboards.
-- Cross-platform support with stub implementations for non-Windows systems.
+## Quick Start
 
----
+**Prerequisites:** Go 1.25+
 
-Installation
-
-Prerequisites:
-
-- Go 1.21+ installed on your system.
-- Git (for cloning the repository).
-
-Clone the repository:
-
+```bash
 git clone https://github.com/deadbolthq/certhound-agent.git
 cd certhound-agent
+go build -o certhound-agent ./cmd/agent
+```
 
----
+## Usage
 
-Usage
+```bash
+# One-shot scan (prints to log, no endpoint)
+certhound-agent
 
-Run the agent:
+# Scan specific directories
+certhound-agent /etc/letsencrypt/live /etc/ssl/certs
 
-go run ./cmd/agent
+# Send results to CertHound API
+certhound-agent --endpoint https://api.certhound.dev/v1/ingest
 
-By default, it scans /etc/ssl/certs on Linux/macOS.
+# Continuous mode: heartbeat hourly, full scan daily, immediate scan on cert file changes
+certhound-agent --endpoint https://api.certhound.dev/v1/ingest --watch
 
-Override the certificate directory:
+# Custom config file
+certhound-agent --config /etc/certhound/config.json --watch
 
-go run ./cmd/agent /path/to/certs
+# Override expiry threshold
+certhound-agent --threshold 14
+```
 
-Output:
+## Configuration
 
-The agent prints JSON with the following structure for each certificate:
+The agent loads configuration from (in priority order):
 
+1. `--config` flag
+2. Auto-discovered file: `/etc/certhound/config.json`, `C:\ProgramData\CertHound\config.json`, `configs/config.json`, or `config.json`
+3. Built-in defaults
+
+CLI flags (`--endpoint`, `--threshold`) override config file values.
+
+Example `config.json`:
+
+```json
 {
-  "subject": "CN=example.com, O=Example Corp",
-  "issuer": "CN=Example CA, O=Certificate Authority",
-  "not_before": "2025-08-01T00:00:00Z",
-  "not_after": "2026-08-01T00:00:00Z",
-  "dns_names": ["example.com", "www.example.com"],
-  "ip_addresses": ["192.168.1.1"],
-  "cert_path": "/etc/ssl/certs/example.crt",
-  "key_path": "/etc/ssl/private/example.key",
-  "expiring_soon": false
+  "ScanPaths": ["/etc/ssl/certs", "/etc/letsencrypt/live"],
+  "ScanPathsWindows": ["C:\\ProgramData\\ssl\\certs"],
+  "ScanIntervalSeconds": 86400,
+  "HeartbeatIntervalSeconds": 3600,
+  "ExpiringThresholdDays": 30,
+  "AWSEndpoint": "https://api.certhound.dev/v1/ingest",
+  "APIKey": "",
+  "TLSVerify": true,
+  "MaxRetries": 3,
+  "PayloadVersion": "1.0",
+  "OrgID": ""
 }
+```
 
----
+**Note:** Do not commit config files containing API keys. The default `.gitignore` protects `config.json` in the repo root; `configs/config.json` is tracked as a development example only.
 
-Cross-Platform Notes
+## Watch Mode
 
-- On Windows, the agent scans both the filesystem and the current user's "MY" certificate store.
-- On non-Windows platforms, the Windows certificate store scan is stubbed and returns no results.
+When running with `--watch`, the agent operates in three modes simultaneously:
 
----
+| Mode | Interval | What it does |
+|------|----------|-------------|
+| **Heartbeat** | Hourly (configurable) | Lightweight check-in with no cert data |
+| **Full scan** | Daily (configurable) | Complete certificate inventory |
+| **File watcher** | On change | Immediate scan when cert files are created, modified, or deleted |
 
-Contributing
+## Payload Types
 
-Contributions, bug reports, and feature requests are welcome. Please fork the repository and submit a pull request.
+The agent sends two types of payloads:
 
----
+**Scan payload** (`payload_type: "scan"`) — full certificate inventory with host metadata, scan duration, and all certificate details.
 
-Attribution
+**Heartbeat payload** (`payload_type: "heartbeat"`) — lightweight check-in with agent identity, host info, and config hash. No certificate data.
 
-Some portions of this project were assisted by large language models (LLMs), including:
+Both include a unique `payload_id` (UUID), `agent_id`, `config_hash`, and `org_id` for backend routing.
 
-- ChatGPT: https://chat.openai.com/
-- GitHub Copilot: https://github.com/features/copilot
-- Claude Code: https://claude.ai/code
+## Building
 
-These tools helped generate boilerplate code, documentation, and comments.
+```bash
+make build              # Build for current platform
+make build-all          # Cross-compile for Linux (amd64/arm64) and Windows (amd64)
+make test               # Run all tests
+```
 
----
+Version is injected at build time:
 
-License
+```bash
+go build -ldflags "-X main.version=1.0.0" -o certhound-agent ./cmd/agent
+```
 
-This project is licensed under for personal use only. See the LICENSE file for details.
+## License
+
+Copyright 2025 DeadboltHQ. Licensed under the [Apache License 2.0](LICENSE).
