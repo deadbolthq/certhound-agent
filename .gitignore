@@ -1,0 +1,33 @@
+# Binaries
+agent
+certhound-agent
+certhound-agent-*
+*.exe
+*.dll
+*.so
+*.dylib
+dist/
+
+# Logs
+logs/
+*.log
+
+# Config with secrets
+config.json
+!configs/config.json
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / build artifacts
+coverage.out
+*.test
+*.out

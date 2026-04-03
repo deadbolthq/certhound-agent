@@ -53,9 +53,9 @@ func (s *Sender) Send(ctx context.Context, pl *payload.Payload) error {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
-			if s.apiKey != "" {
-				req.Header.Set("Authorization", "Bearer "+s.apiKey)
-			}
+		if s.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+s.apiKey)
+		}
 
 		resp, err := s.httpClient.Do(req)
 		if err != nil {

@@ -11,8 +11,11 @@ import (
 func TestDefaultConfig_Defaults(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.ScanIntervalSeconds != 3600 {
-		t.Errorf("ScanIntervalSeconds: got %d, want 3600", cfg.ScanIntervalSeconds)
+	if cfg.ScanIntervalSeconds != 86400 {
+		t.Errorf("ScanIntervalSeconds: got %d, want 86400", cfg.ScanIntervalSeconds)
+	}
+	if cfg.HeartbeatIntervalSeconds != 3600 {
+		t.Errorf("HeartbeatIntervalSeconds: got %d, want 3600", cfg.HeartbeatIntervalSeconds)
 	}
 	if cfg.ExpiringThresholdDays != 30 {
 		t.Errorf("ExpiringThresholdDays: got %d, want 30", cfg.ExpiringThresholdDays)
@@ -83,8 +86,8 @@ func TestLoadConfig_ZeroValueFallbacks(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	if cfg.ScanIntervalSeconds != 3600 {
-		t.Errorf("ScanIntervalSeconds fallback: got %d, want 3600", cfg.ScanIntervalSeconds)
+	if cfg.ScanIntervalSeconds != 86400 {
+		t.Errorf("ScanIntervalSeconds fallback: got %d, want 86400", cfg.ScanIntervalSeconds)
 	}
 	if cfg.ExpiringThresholdDays != 30 {
 		t.Errorf("ExpiringThresholdDays fallback: got %d, want 30", cfg.ExpiringThresholdDays)

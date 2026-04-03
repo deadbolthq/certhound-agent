@@ -14,7 +14,7 @@ import (
 
 func testPayload() *payload.Payload {
 	cfg := &config.Config{AgentName: "test", PayloadVersion: "1.0"}
-	return payload.NewPayload(nil, cfg, "dev", "test-agent-id")
+	return payload.NewPayload(nil, cfg, "dev", "test-agent-id", time.Now(), nil)
 }
 
 func TestSend_Success(t *testing.T) {

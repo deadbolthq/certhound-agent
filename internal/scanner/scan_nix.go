@@ -7,11 +7,7 @@ Package scanner provides utilities for scanning X.509 certificates.
 This file contains a stub implementation of ScanWindowsCertStore for non-Windows
 platforms. It ensures that the scanner package can compile and run on Linux, macOS,
 and other OSes where the Windows certificate store does not exist.
-
-Author: Will Keel
-Date: 2025-08-27
 */
-
 package scanner
 
 import "github.com/deadbolthq/certhound-agent/internal/config"

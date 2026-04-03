@@ -17,14 +17,16 @@ type Config struct {
 	LogPath               string   `json:"LogPath"`
 	Verbose               bool     `json:"Verbose"`
 	LogLevel              string   `json:"LogLevel"`
-	AWSEndpoint           string   `json:"AWSEndpoint"`
-	APIKey                string   `json:"APIKey"`
-	TLSVerify             bool     `json:"TLSVerify"`
-	MaxRetries            int      `json:"MaxRetries"`
-	AgentName             string   `json:"AgentName"`
-	IncludeIPAddresses    bool     `json:"IncludeIPAddresses"`
-	IncludeSelfSigned     bool     `json:"IncludeSelfSigned"`
-	PayloadVersion        string   `json:"PayloadVersion"`
+	AWSEndpoint              string   `json:"AWSEndpoint"`
+	APIKey                   string   `json:"APIKey"`
+	TLSVerify                bool     `json:"TLSVerify"`
+	MaxRetries               int      `json:"MaxRetries"`
+	AgentName                string   `json:"AgentName"`
+	IncludeIPAddresses       bool     `json:"IncludeIPAddresses"`
+	IncludeSelfSigned        bool     `json:"IncludeSelfSigned"`
+	PayloadVersion           string   `json:"PayloadVersion"`
+	OrgID                    string   `json:"OrgID"`
+	HeartbeatIntervalSeconds int      `json:"HeartbeatIntervalSeconds"`
 }
 
 // LoadConfig reads a JSON config file and returns a Config struct
@@ -46,13 +48,14 @@ func LoadConfig(path string) (*Config, error) {
 // Used when no config file is provided.
 func DefaultConfig() *Config {
 	cfg := &Config{
-		ScanIntervalSeconds:   3600,
-		ExpiringThresholdDays: 30,
-		MaxRetries:            3,
-		AgentName:             "certhound-agent",
-		LogLevel:              "INFO",
-		PayloadVersion:        "1.0",
-		TLSVerify:             true,
+		ScanIntervalSeconds:      86400, // daily
+		HeartbeatIntervalSeconds: 3600,  // hourly
+		ExpiringThresholdDays:    30,
+		MaxRetries:               3,
+		AgentName:                "certhound-agent",
+		LogLevel:                 "INFO",
+		PayloadVersion:           "1.0",
+		TLSVerify:                true,
 	}
 	switch runtime.GOOS {
 	case "windows":
@@ -80,7 +83,12 @@ func DefaultConfig() *Config {
 	return cfg
 }
 
-// ScanInterval returns the scan interval as a time.Duration
+// ScanInterval returns the scan interval as a time.Duration.
 func (c *Config) ScanInterval() time.Duration {
 	return time.Duration(c.ScanIntervalSeconds) * time.Second
+}
+
+// HeartbeatInterval returns the heartbeat interval as a time.Duration.
+func (c *Config) HeartbeatInterval() time.Duration {
+	return time.Duration(c.HeartbeatIntervalSeconds) * time.Second
 }

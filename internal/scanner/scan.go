@@ -2,14 +2,12 @@
 Package scanner provides utilities for scanning X.509 certificates from the filesystem
 and converting them to a JSON-friendly format. It supports Linux, macOS, and Windows
 by optionally scanning the Windows certificate store.
-
-Author: Will Keel
-Date: 2025-08-27
 */
-
 package scanner
 
 import (
+	"crypto/ecdsa"  // For ECDSA key size detection
+	"crypto/rsa"    // For RSA key size detection
 	"crypto/sha256" // For computing certificate fingerprints
 	"crypto/x509"   // For parsing X.509 certificates
 	"encoding/hex"  // For encoding fingerprints as hex strings
@@ -17,7 +15,8 @@ import (
 	"encoding/pem"  // For decoding PEM blocks
 	"fmt"           // For error formatting
 	"io/fs"         // For file system directory walking
-	"math/big"      // For handling big integers (serial numbers
+	"math"          // For bit length calculation
+	"math/big"      // For handling big integers (serial numbers)
 	"os"            // For reading files and checking existence
 	"path/filepath" // For cross-platform file path handling
 	"runtime"       // For detecting operating system
@@ -29,33 +28,65 @@ import (
 )
 
 // CertInfo represents a certificate in a JSON-friendly format.
-//
-// Fields:
-//
-//	Subject      - The certificate's subject (owner)
-//	Issuer       - The certificate issuer (CA)
-//	NotBefore    - Certificate validity start (RFC3339 format)
-//	NotAfter     - Certificate expiry (RFC3339 format)
-//	DNSNames     - Associated domain names
-//	IPAddresses  - Associated IP addresses, optional
-//	CertPath     - Path to the certificate file
-//	KeyPath      - Guessed path to private key
-//	ExpiringSoon - True if certificate expires within 30 days
 type CertInfo struct {
-	Subject      string   `json:"subject"`
-	Issuer       string   `json:"issuer"`
-	SerialNumber string   `json:"serial_number"`
-	Fingerprint  string   `json:"fingerprint_sha256"`
-	KeyUsage     []string `json:"key_usage,omitempty"`
-	ExtKeyUsage  []string `json:"extended_key_usage,omitempty"`
-	NotBefore    string   `json:"not_before"`
-	NotAfter     string   `json:"not_after"`
-	DNSNames     []string `json:"dns_names"`
-	IPAddresses  []string `json:"ip_addresses,omitempty"`
-	CertPath     string   `json:"cert_path"`
-	KeyPath      string   `json:"key_path"`
-	ExpiringSoon bool     `json:"expiring_soon"`
-	Expired      bool     `json:"expired"`
+	// Identity
+	Subject      string `json:"subject"`
+	Issuer       string `json:"issuer"`
+	SerialNumber string `json:"serial_number"`
+	Fingerprint  string `json:"fingerprint_sha256"`
+
+	// Key & signature details
+	PublicKeyAlgorithm string `json:"public_key_algorithm"`
+	PublicKeyBits      int    `json:"public_key_bits"`
+	SignatureAlgorithm string `json:"signature_algorithm"`
+
+	// Usage
+	KeyUsage    []string `json:"key_usage,omitempty"`
+	ExtKeyUsage []string `json:"extended_key_usage,omitempty"`
+	IsCA        bool     `json:"is_ca"`
+	IsSelfSigned bool    `json:"is_self_signed"`
+
+	// Validity
+	NotBefore      string `json:"not_before"`
+	NotAfter       string `json:"not_after"`
+	DaysUntilExpiry int   `json:"days_until_expiry"`
+	ExpiringSoon   bool   `json:"expiring_soon"`
+	Expired        bool   `json:"expired"`
+
+	// SANs
+	DNSNames    []string `json:"dns_names"`
+	IPAddresses []string `json:"ip_addresses,omitempty"`
+	EmailSANs   []string `json:"email_sans,omitempty"`
+	URISANs     []string `json:"uri_sans,omitempty"`
+
+	// Revocation & AIA
+	OCSPURLs      []string `json:"ocsp_urls,omitempty"`
+	CRLURLs       []string `json:"crl_urls,omitempty"`
+	IssuingCAURLs []string `json:"issuing_ca_urls,omitempty"`
+
+	// Chain info (populated when chain validation is implemented)
+	ChainValid *bool   `json:"chain_valid"`
+	ChainDepth *int    `json:"chain_depth"`
+	ChainError *string `json:"chain_error"`
+
+	// Renewal tracking (populated when delta scanning is implemented)
+	PreviousFingerprint *string `json:"previous_fingerprint"`
+
+	// Live endpoint (populated when endpoint probing is implemented)
+	Port              *int    `json:"port"`
+	Protocol          string  `json:"protocol"`
+	EndpointReachable *bool   `json:"endpoint_reachable"`
+	EndpointIP        *string `json:"endpoint_ip"`
+	EndpointPort      *int    `json:"endpoint_port"`
+
+	// Location / source
+	Source           string `json:"source"`
+	SourceType       string `json:"source_type"`
+	SourceStore      string `json:"source_store,omitempty"`
+	SourceDetail     string `json:"source_detail"`
+	WindowsStoreName string `json:"windows_store_name,omitempty"`
+	CertPath         string `json:"cert_path"`
+	KeyPath          string `json:"key_path"`
 }
 
 /*
@@ -139,26 +170,48 @@ func ScanCertFiles(dir string, cfg *config.Config) ([]CertInfo, error) {
 				}
 			}
 
+			// URI SANs
+			var uriStrs []string
+			for _, u := range cert.URIs {
+				uriStrs = append(uriStrs, u.String())
+			}
+
 			now := time.Now()
 			expired := cert.NotAfter.Before(now)
 			expiringSoon := !expired && time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
+			daysUntil := int(math.Ceil(time.Until(cert.NotAfter).Hours() / 24))
 
 			// Append a new CertInfo object to the result slice
 			certInfos = append(certInfos, CertInfo{
-				Subject:      cert.Subject.String(),
-				Issuer:       cert.Issuer.String(),
-				SerialNumber: getSerialHex(cert.SerialNumber),
-				Fingerprint:  getFingerprintSHA256(cert),
-				KeyUsage:     mapKeyUsage(cert.KeyUsage),
-				ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
-				NotBefore:    cert.NotBefore.Format(time.RFC3339),
-				NotAfter:     cert.NotAfter.Format(time.RFC3339),
-				DNSNames:     cert.DNSNames,
-				IPAddresses:  ipStrs,
-				CertPath:     path,
-				KeyPath:      guessKeyPath(path),
-				ExpiringSoon: expiringSoon,
-				Expired:      expired,
+				Subject:            cert.Subject.String(),
+				Issuer:             cert.Issuer.String(),
+				SerialNumber:       getSerialHex(cert.SerialNumber),
+				Fingerprint:        getFingerprintSHA256(cert),
+				PublicKeyAlgorithm: getPublicKeyAlgorithm(cert),
+				PublicKeyBits:      getPublicKeyBits(cert),
+				SignatureAlgorithm: cert.SignatureAlgorithm.String(),
+				KeyUsage:           mapKeyUsage(cert.KeyUsage),
+				ExtKeyUsage:        mapExtKeyUsage(cert.ExtKeyUsage),
+				IsCA:               cert.IsCA,
+				IsSelfSigned:       cert.Issuer.String() == cert.Subject.String(),
+				NotBefore:          cert.NotBefore.Format(time.RFC3339),
+				NotAfter:           cert.NotAfter.Format(time.RFC3339),
+				DaysUntilExpiry:    daysUntil,
+				ExpiringSoon:       expiringSoon,
+				Expired:            expired,
+				DNSNames:           cert.DNSNames,
+				IPAddresses:        ipStrs,
+				EmailSANs:          cert.EmailAddresses,
+				URISANs:            uriStrs,
+				OCSPURLs:           cert.OCSPServer,
+				CRLURLs:            cert.CRLDistributionPoints,
+				IssuingCAURLs:      cert.IssuingCertificateURL,
+				Protocol:           "filesystem",
+				Source:             "filesystem",
+				SourceType:         "filesystem",
+				SourceDetail:       path,
+				CertPath:           path,
+				KeyPath:            guessKeyPath(path),
 			})
 
 		}
@@ -333,6 +386,34 @@ func mapKeyUsage(ku x509.KeyUsage) []string {
 		usages = append(usages, "DecipherOnly")
 	}
 	return usages
+}
+
+// getPublicKeyAlgorithm returns a human-readable name for the certificate's public key algorithm.
+func getPublicKeyAlgorithm(cert *x509.Certificate) string {
+	switch cert.PublicKeyAlgorithm {
+	case x509.RSA:
+		return "RSA"
+	case x509.ECDSA:
+		return "ECDSA"
+	case x509.Ed25519:
+		return "Ed25519"
+	case x509.DSA:
+		return "DSA"
+	default:
+		return "Unknown"
+	}
+}
+
+// getPublicKeyBits returns the key size in bits for RSA and ECDSA keys, 0 for others.
+func getPublicKeyBits(cert *x509.Certificate) int {
+	switch k := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		return k.N.BitLen()
+	case *ecdsa.PublicKey:
+		return k.Curve.Params().BitSize
+	default:
+		return 0
+	}
 }
 
 // mapExtKeyUsage converts the ExtendedKeyUsage slice to a slice of human-readable strings.

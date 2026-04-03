@@ -4,17 +4,14 @@
 /*
 Package scanner provides utilities for scanning X.509 certificates.
 
-This file contains Windows-specific functionality to scan certificates from the
-current user's Windows certificate store ("MY" store).
-
-Author: Will Keel
-Date: 2025-08-27
+This file contains Windows-specific functionality to scan certificates from
+the Windows certificate stores (Current User and Local Machine).
 */
-
 package scanner
 
 import (
 	"crypto/x509" // For parsing X.509 certificates
+	"math"        // For bit length calculation
 	"time"        // For working with certificate expiration dates
 	"unsafe"      // For converting pointers to byte slices
 
@@ -91,22 +88,48 @@ func ScanWindowsCertStore(cfg *config.Config) ([]CertInfo, error) {
 				}
 			}
 
-			expiringSoon := time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
+			var uriStrs []string
+			for _, u := range cert.URIs {
+				uriStrs = append(uriStrs, u.String())
+			}
+
+			now := time.Now()
+			expired := cert.NotAfter.Before(now)
+			expiringSoon := !expired && time.Until(cert.NotAfter) <= time.Duration(cfg.ExpiringThresholdDays)*24*time.Hour
+			daysUntil := int(math.Ceil(time.Until(cert.NotAfter).Hours() / 24))
 
 			certInfos = append(certInfos, CertInfo{
-				Subject:      cert.Subject.String(),
-				Issuer:       cert.Issuer.String(),
-				SerialNumber: getSerialHex(cert.SerialNumber),
-				Fingerprint:  getFingerprintSHA256(cert),
-				KeyUsage:     mapKeyUsage(cert.KeyUsage),
-				ExtKeyUsage:  mapExtKeyUsage(cert.ExtKeyUsage),
-				NotBefore:    cert.NotBefore.Format(time.RFC3339),
-				NotAfter:     cert.NotAfter.Format(time.RFC3339),
-				DNSNames:     cert.DNSNames,
-				IPAddresses:  ipStrs,
-				CertPath:     "WINDOWS_STORE:" + ws.storeName, // ✅ accurate store name
-				KeyPath:      WindowsKeyPath,
-				ExpiringSoon: expiringSoon,
+				Subject:            cert.Subject.String(),
+				Issuer:             cert.Issuer.String(),
+				SerialNumber:       getSerialHex(cert.SerialNumber),
+				Fingerprint:        getFingerprintSHA256(cert),
+				PublicKeyAlgorithm: getPublicKeyAlgorithm(cert),
+				PublicKeyBits:      getPublicKeyBits(cert),
+				SignatureAlgorithm: cert.SignatureAlgorithm.String(),
+				KeyUsage:           mapKeyUsage(cert.KeyUsage),
+				ExtKeyUsage:        mapExtKeyUsage(cert.ExtKeyUsage),
+				IsCA:               cert.IsCA,
+				IsSelfSigned:       cert.Issuer.String() == cert.Subject.String(),
+				NotBefore:          cert.NotBefore.Format(time.RFC3339),
+				NotAfter:           cert.NotAfter.Format(time.RFC3339),
+				DaysUntilExpiry:    daysUntil,
+				ExpiringSoon:       expiringSoon,
+				Expired:            expired,
+				DNSNames:           cert.DNSNames,
+				IPAddresses:        ipStrs,
+				EmailSANs:          cert.EmailAddresses,
+				URISANs:            uriStrs,
+				OCSPURLs:           cert.OCSPServer,
+				CRLURLs:            cert.CRLDistributionPoints,
+				IssuingCAURLs:      cert.IssuingCertificateURL,
+				Protocol:         "windows_store",
+				Source:           "windows_store",
+				SourceType:       "windows_store",
+				SourceStore:      ws.storeName,
+				SourceDetail:     "WINDOWS_STORE:" + ws.storeName,
+				WindowsStoreName: ws.storeName,
+				CertPath:         "WINDOWS_STORE:" + ws.storeName,
+				KeyPath:          WindowsKeyPath,
 			})
 		}
 
