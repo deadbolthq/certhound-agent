@@ -51,7 +51,13 @@ func main() {
 		}
 		cfg = loaded
 	} else {
-		for _, try := range []string{"configs/config.json", "config.json"} {
+		candidates := []string{
+			"/etc/certhound/config.json",                          // Linux system install
+			`C:\ProgramData\CertHound\config.json`,               // Windows system install
+			"configs/config.json",                                 // dev/relative fallback
+			"config.json",
+		}
+		for _, try := range candidates {
 			if _, err := os.Stat(try); err == nil {
 				if loaded, err := config.LoadConfig(try); err == nil {
 					cfg = loaded
