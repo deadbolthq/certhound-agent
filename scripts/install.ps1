@@ -10,6 +10,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Ensure TLS 1.2 — fresh Windows Server defaults to older protocols
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $ReleasesUrl  = "https://github.com/deadbolthq/certhound-agent/releases/latest/download"
 $InstallDir   = "C:\Program Files\CertHound"
 $BinaryPath   = "$InstallDir\certhound-agent.exe"
@@ -48,6 +51,15 @@ Write-Host "==> Downloading from $BinaryUrl"
 Invoke-WebRequest -Uri $BinaryUrl -OutFile $BinaryPath -UseBasicParsing
 Write-Host "==> Binary installed to $BinaryPath"
 
+# Add install directory to system PATH if not already present
+$machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+if ($machinePath -notlike "*$InstallDir*") {
+    Write-Host "==> Adding $InstallDir to system PATH"
+    [Environment]::SetEnvironmentVariable("Path", "$machinePath;$InstallDir", "Machine")
+    # Update current session so the service and subsequent commands can find it
+    $env:Path = "$env:Path;$InstallDir"
+}
+
 # ---------------------------------------------------------------------------
 # Provision (writes key + config to C:\ProgramData\CertHound\)
 # ---------------------------------------------------------------------------
@@ -76,12 +88,14 @@ New-Service `
     -DisplayName $DisplayName `
     -Description "CertHound certificate monitoring agent" `
     -BinaryPathName "$BinaryPath --watch" `
-    -StartupType Automatic
+    -StartupType Automatic | Out-Null
 
+Write-Host "==> Starting service..."
 Start-Service -Name $ServiceName
 
+$svc = Get-Service -Name $ServiceName
 Write-Host ""
-Write-Host "==> CertHound agent installed and running."
+Write-Host "==> CertHound agent installed and running. (Status: $($svc.Status))"
 Write-Host "    Check status:  Get-Service $ServiceName"
-Write-Host "    View logs:     Get-EventLog -LogName Application -Source $ServiceName -Newest 50"
+Write-Host "    View logs:     Get-Content 'C:\ProgramData\CertHound\logs\*.log' -Tail 20"
 Write-Host "    Stop agent:    Stop-Service $ServiceName"

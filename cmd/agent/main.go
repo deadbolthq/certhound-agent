@@ -121,25 +121,12 @@ func main() {
 		log.Infof("Sender initialized for endpoint: %s", cfg.AWSEndpoint)
 	}
 
-	if *watchMode {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			<-sigs
-			log.Infof("Shutdown signal received, stopping agent...")
-			cancel()
-		}()
-
-		// changeTrigger is buffered so the file watcher never blocks.
-		// A value sent here causes an immediate scan outside the daily schedule.
+	// watchLoop runs the continuous scan/heartbeat loop until ctx is cancelled.
+	// Extracted so it can be called from either CLI mode or the Windows service handler.
+	watchLoop := func(ctx context.Context) {
 		changeTrigger := make(chan struct{}, 1)
-
-		// Start filesystem watcher on scan paths
 		startFileWatcher(ctx, cfg, log, changeTrigger)
 
-		// Initial scan on startup
 		runScan(ctx, cfg, log, senderClient, agentID)
 
 		heartbeatTicker := time.NewTicker(cfg.HeartbeatInterval())
@@ -163,6 +150,27 @@ func main() {
 				log.Infof("File change detected — running triggered scan")
 				runScan(ctx, cfg, log, senderClient, agentID)
 			}
+		}
+	}
+
+	if *watchMode || isWindowsService() {
+		if isWindowsService() {
+			// Running as a Windows service — delegate to the SCM handler
+			// which manages the context lifecycle (cancel on stop/shutdown).
+			log.Infof("Running as Windows service")
+			runAsService(watchLoop)
+		} else {
+			// Running from the CLI with --watch
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+			go func() {
+				<-sigs
+				log.Infof("Shutdown signal received, stopping agent...")
+				cancel()
+			}()
+			watchLoop(ctx)
 		}
 	} else {
 		runScan(context.Background(), cfg, log, senderClient, agentID)
