@@ -19,7 +19,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// version is injected at build time via: -ldflags "-X main.version=x.y.z"
+// version is injected at build time via: -ldflags "-X main.version=v1.2.3"
+// The tag includes the "v" prefix, so format strings should use %s not v%s.
 var version = "dev"
 
 func main() {
@@ -34,7 +35,7 @@ func main() {
 	)
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "CertHound Agent v%s\n\n", version)
+		fmt.Fprintf(os.Stderr, "CertHound Agent %s\n\n", version)
 		fmt.Fprintf(os.Stderr, "Scans for X.509 certificates on this host and reports their status.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n  certhound-agent [flags] [path ...]\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
@@ -54,7 +55,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Example: certhound-agent --provision --key ch_xxx --endpoint https://api.example.com/ingest")
 			os.Exit(1)
 		}
-		fmt.Printf("Provisioning CertHound agent v%s...\n", version)
+		fmt.Printf("Provisioning CertHound agent %s...\n", version)
 		if err := config.Provision(*key, *endpoint); err != nil {
 			fmt.Fprintf(os.Stderr, "Provisioning failed: %v\n", err)
 			os.Exit(1)
@@ -104,7 +105,7 @@ func main() {
 	agentID := identity.GetOrCreate()
 
 	log := logger.NewLogger(cfg.LogPath, cfg.LogLevel, cfg.Verbose)
-	log.Infof("CertHound agent v%s starting on %s/%s (id: %s)", version, runtime.GOOS, runtime.GOARCH, agentID)
+	log.Infof("CertHound agent %s starting on %s/%s (id: %s)", version, runtime.GOOS, runtime.GOARCH, agentID)
 	defer log.Close()
 
 	// Sender is only needed when an endpoint is configured

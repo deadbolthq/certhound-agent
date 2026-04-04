@@ -79,7 +79,7 @@ if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     Write-Host "==> Removing existing service..."
     Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
     sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 5
 }
 
 Write-Host "==> Creating Windows service..."
