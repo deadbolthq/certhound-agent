@@ -1,12 +1,10 @@
 # CertHound Agent Installer - Windows
-# Usage: irm https://install.certhound.com/windows | iex
-# Or with a key: & ([scriptblock]::Create((irm https://install.certhound.com/windows))) --key ch_xxx
-#
 # Requires: PowerShell 5.1+, run as Administrator
+# Get your install command (including key and endpoint) from the CertHound dashboard.
 
 param(
     [string]$Key = "",
-    [string]$Endpoint = "https://pjl3aq28k4.execute-api.us-east-1.amazonaws.com/ingest"
+    [string]$Endpoint = ""
 )
 
 Set-StrictMode -Version Latest
@@ -23,7 +21,12 @@ $DisplayName  = "CertHound Agent"
 # ---------------------------------------------------------------------------
 
 if (-not $Key) {
-    Write-Error "Error: -Key is required.`nGet your API key from the CertHound dashboard."
+    Write-Error "Error: -Key is required. Get your install command from the CertHound dashboard."
+    exit 1
+}
+
+if (-not $Endpoint) {
+    Write-Error "Error: -Endpoint is required. Get your install command from the CertHound dashboard."
     exit 1
 }
 
@@ -60,7 +63,6 @@ if ($LASTEXITCODE -ne 0) {
 # Install Windows Service
 # ---------------------------------------------------------------------------
 
-# Remove existing service if present
 if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     Write-Host "==> Removing existing service..."
     Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue

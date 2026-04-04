@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # CertHound Agent Installer — Linux
-# Usage: curl -sSL https://install.certhound.com | sudo bash -s -- --key ch_xxx
+# Usage: curl -sSL https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.sh | sudo bash -s -- --key ch_xxx --endpoint https://your-api/ingest
 set -euo pipefail
 
 RELEASES_URL="https://github.com/deadbolthq/certhound-agent/releases/latest/download"
-INGEST_ENDPOINT="https://pjl3aq28k4.execute-api.us-east-1.amazonaws.com/ingest"
 INSTALL_PATH="/usr/local/bin/certhound-agent"
 SERVICE_NAME="certhound-agent"
 
@@ -13,7 +12,7 @@ SERVICE_NAME="certhound-agent"
 # ---------------------------------------------------------------------------
 
 KEY=""
-ENDPOINT="$INGEST_ENDPOINT"
+ENDPOINT=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -25,8 +24,13 @@ done
 
 if [[ -z "$KEY" ]]; then
   echo "Error: --key is required." >&2
-  echo "Get your API key from the CertHound dashboard, then run:" >&2
-  echo "  curl -sSL https://install.certhound.com | sudo bash -s -- --key ch_xxx" >&2
+  echo "Get your API key and install command from the CertHound dashboard." >&2
+  exit 1
+fi
+
+if [[ -z "$ENDPOINT" ]]; then
+  echo "Error: --endpoint is required." >&2
+  echo "Get your API key and install command from the CertHound dashboard." >&2
   exit 1
 fi
 
