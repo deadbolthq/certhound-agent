@@ -29,6 +29,8 @@ func main() {
 		apiKeyFile = flag.String("api-key-file", "", "Path to file containing the API key")
 		watchMode  = flag.Bool("watch", false, "Run continuously on the configured scan interval")
 		threshold  = flag.Int("threshold", 0, "Days before expiry to flag as expiring (overrides config)")
+		provision  = flag.Bool("provision", false, "Write API key and config to disk, then exit. Requires --key and --endpoint.")
+		key        = flag.String("key", "", "API key to write during --provision (not used at runtime)")
 	)
 
 	flag.Usage = func() {
@@ -43,6 +45,23 @@ func main() {
 	}
 	flag.Parse()
 	extraPaths := flag.Args()
+
+	// --provision: write key + config to disk, then exit.
+	// The install script calls this once after placing the binary.
+	if *provision {
+		if *key == "" || *endpoint == "" {
+			fmt.Fprintln(os.Stderr, "Error: --provision requires both --key and --endpoint")
+			fmt.Fprintln(os.Stderr, "Example: certhound-agent --provision --key ch_xxx --endpoint https://api.example.com/ingest")
+			os.Exit(1)
+		}
+		fmt.Printf("Provisioning CertHound agent v%s...\n", version)
+		if err := config.Provision(*key, *endpoint); err != nil {
+			fmt.Fprintf(os.Stderr, "Provisioning failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Done. Start the agent with: certhound-agent --watch")
+		os.Exit(0)
+	}
 
 	// Load config: --config flag > auto-discovered file > built-in defaults
 	cfg := config.DefaultConfig()

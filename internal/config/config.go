@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -28,6 +29,45 @@ type Config struct {
 	PayloadVersion           string   `json:"PayloadVersion"`
 	OrgID                    string   `json:"OrgID"`
 	HeartbeatIntervalSeconds int      `json:"HeartbeatIntervalSeconds"`
+}
+
+// platformConfigDir returns the OS-appropriate directory for CertHound config and key files.
+func platformConfigDir() string {
+	if runtime.GOOS == "windows" {
+		return `C:\ProgramData\CertHound`
+	}
+	return "/etc/certhound"
+}
+
+// Provision writes the API key and a default config file to the platform config directory.
+// Called once by the installer via --provision. Safe to re-run — overwrites existing files.
+func Provision(apiKey, endpoint string) error {
+	dir := platformConfigDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("creating config dir %s: %w", dir, err)
+	}
+
+	// Write API key (mode 0600 — readable only by root/SYSTEM)
+	keyPath := filepath.Join(dir, "api.key")
+	if err := os.WriteFile(keyPath, []byte(strings.TrimSpace(apiKey)+"\n"), 0600); err != nil {
+		return fmt.Errorf("writing api key to %s: %w", keyPath, err)
+	}
+	fmt.Printf("  API key written to: %s\n", keyPath)
+
+	// Write config with endpoint set; all other values are defaults
+	cfg := DefaultConfig()
+	cfg.AWSEndpoint = endpoint
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return fmt.Errorf("writing config to %s: %w", configPath, err)
+	}
+	fmt.Printf("  Config written to:  %s\n", configPath)
+
+	return nil
 }
 
 // LoadConfig reads a JSON config file and returns a Config struct

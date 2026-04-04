@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create the GitHub Release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+          VERSION="${{ github.ref_name }}"
+          LDFLAGS="-X main.version=${VERSION}"
+
+          GOOS=linux   GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/certhound-agent-linux-amd64   ./cmd/agent
+          GOOS=linux   GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/certhound-agent-linux-arm64   ./cmd/agent
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/certhound-agent-windows-amd64.exe ./cmd/agent
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
