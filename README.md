@@ -9,6 +9,7 @@ A cross-platform Go agent that scans X.509 certificates from the filesystem and 
 - Flags certificates that are expired or expiring within a configurable threshold
 - Sends structured JSON payloads to a remote API endpoint with retry logic
 - **Watch mode**: continuous operation with daily scans, hourly heartbeats, and file-change triggered scans via fsnotify
+- **Auto-update**: checks GitHub Releases daily, downloads with SHA-256 checksum verification, and self-updates with automatic rollback on failure
 - Computes SHA-256 fingerprints, extracts SANs, key usage, OCSP/CRL URLs, and more
 
 ## Quick Start
@@ -63,15 +64,37 @@ Example `config.json`:
   "HeartbeatIntervalSeconds": 3600,
   "ExpiringThresholdDays": 30,
   "AWSEndpoint": "https://api.certhound.dev/v1/ingest",
-  "APIKey": "",
   "TLSVerify": true,
   "MaxRetries": 3,
+  "AutoUpdate": true,
   "PayloadVersion": "1.0",
   "OrgID": ""
 }
 ```
 
-**Note:** Do not commit config files containing API keys. The default `.gitignore` protects `config.json` in the repo root; `configs/config.json` is tracked as a development example only.
+**Note:** API keys are never stored in the config file. They are resolved from the `CERTHOUND_API_KEY` environment variable, the `--api-key-file` flag, or a platform-specific default key file (see [API Key Resolution](#api-key-resolution) below).
+
+## API Key Resolution
+
+The agent looks for an API key in the following order:
+
+1. `CERTHOUND_API_KEY` environment variable
+2. `--api-key-file` flag pointing to a file containing the key
+3. Platform-specific default locations:
+   - Linux/macOS: `/etc/certhound/api.key`, `~/.certhound/api.key`
+   - Windows: `C:\ProgramData\CertHound\api.key`, `%USERPROFILE%\.certhound\api.key`
+
+The installer and `--provision` flag handle key placement automatically.
+
+## Auto-Update
+
+When `AutoUpdate` is `true` (the default), the agent checks GitHub Releases for a newer version once on startup and every 24 hours. Updates are:
+
+- **Verified**: SHA-256 checksums are downloaded and checked before any binary replacement. Updates are refused if no checksum file is present.
+- **Backed up**: The current binary is saved as `.bak` before replacement, enabling automatic rollback.
+- **Privileged**: Updates only run when the agent has root (Linux) or administrator (Windows) privileges.
+
+To disable auto-update, set `"AutoUpdate": false` in the config file.
 
 ## Watch Mode
 
@@ -109,4 +132,4 @@ go build -ldflags "-X main.version=1.0.0" -o certhound-agent ./cmd/agent
 
 ## License
 
-Copyright 2025 DeadboltHQ. Licensed under the [Apache License 2.0](LICENSE).
+Copyright 2025-2026 DeadboltHQ. Licensed under the [Apache License 2.0](LICENSE).
