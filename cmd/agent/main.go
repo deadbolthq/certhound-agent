@@ -16,6 +16,7 @@ import (
 	"github.com/deadbolthq/certhound-agent/internal/payload"
 	"github.com/deadbolthq/certhound-agent/internal/scanner"
 	"github.com/deadbolthq/certhound-agent/internal/sender"
+	"github.com/deadbolthq/certhound-agent/internal/updater"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -130,10 +131,17 @@ func main() {
 
 		runScan(ctx, cfg, log, senderClient, agentID)
 
+		// Check for updates on startup
+		if cfg.AutoUpdate {
+			checkForUpdate(ctx, cfg, log)
+		}
+
 		heartbeatTicker := time.NewTicker(cfg.HeartbeatInterval())
 		scanTicker := time.NewTicker(cfg.ScanInterval())
+		updateTicker := time.NewTicker(24 * time.Hour)
 		defer heartbeatTicker.Stop()
 		defer scanTicker.Stop()
+		defer updateTicker.Stop()
 
 		log.Infof("Watch mode active — heartbeat every %s, full scan every %s",
 			cfg.HeartbeatInterval(), cfg.ScanInterval())
@@ -147,6 +155,10 @@ func main() {
 				sendHeartbeat(ctx, cfg, log, senderClient, agentID)
 			case <-scanTicker.C:
 				runScan(ctx, cfg, log, senderClient, agentID)
+			case <-updateTicker.C:
+				if cfg.AutoUpdate {
+					checkForUpdate(ctx, cfg, log)
+				}
 			case <-changeTrigger:
 				log.Infof("File change detected — running triggered scan")
 				runScan(ctx, cfg, log, senderClient, agentID)
@@ -243,6 +255,22 @@ func sendHeartbeat(ctx context.Context, cfg *config.Config, log *logger.Logger, 
 	} else {
 		log.Infof("Heartbeat sent to %s", cfg.AWSEndpoint)
 	}
+}
+
+func checkForUpdate(ctx context.Context, cfg *config.Config, log *logger.Logger) {
+	log.Infof("Checking for updates...")
+	res := updater.CheckAndUpdate(ctx, version, cfg.UpdateCheckURL)
+	if res.Error != nil {
+		log.Warnf("Update check failed: %v", res.Error)
+		return
+	}
+	if !res.Updated {
+		log.Infof("Agent is up to date (%s)", version)
+		return
+	}
+	log.Infof("Updated from %s to %s — restart required", res.CurrentVersion, res.NewVersion)
+	// The service manager (Windows SCM or systemd) will restart us automatically.
+	os.Exit(0)
 }
 
 func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string) {
