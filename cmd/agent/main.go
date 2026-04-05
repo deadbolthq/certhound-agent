@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -215,23 +217,43 @@ func startFileWatcher(ctx context.Context, cfg *config.Config, log *logger.Logge
 		}
 	}
 
+	// certExts are the file extensions that indicate a certificate file changed.
+	certExts := map[string]bool{
+		".pem": true, ".crt": true, ".cer": true, ".der": true,
+		".p12": true, ".pfx": true, ".key": true, ".csr": true,
+	}
+
 	go func() {
 		defer watcher.Close()
+		var debounce *time.Timer
 		for {
 			select {
 			case <-ctx.Done():
+				if debounce != nil {
+					debounce.Stop()
+				}
 				return
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return
 				}
 				if event.Has(fsnotify.Create) || event.Has(fsnotify.Write) || event.Has(fsnotify.Remove) {
-					log.Debugf("File watcher event: %s %s", event.Op, event.Name)
-					// Non-blocking send: if a trigger is already pending, skip this one
-					select {
-					case changeTrigger <- struct{}{}:
-					default:
+					ext := strings.ToLower(filepath.Ext(event.Name))
+					if !certExts[ext] {
+						continue
 					}
+					log.Debugf("File watcher event: %s %s", event.Op, event.Name)
+					// Debounce: wait 10 seconds after the last cert-related event
+					// before triggering a scan. This collapses bursts into one scan.
+					if debounce != nil {
+						debounce.Stop()
+					}
+					debounce = time.AfterFunc(10*time.Second, func() {
+						select {
+						case changeTrigger <- struct{}{}:
+						default:
+						}
+					})
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
