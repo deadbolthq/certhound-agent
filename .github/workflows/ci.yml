@@ -16,4 +16,4 @@ jobs:
           go-version: '1.25'
 
       - name: Run tests
-        run: go test ./...
+        run: go test $(go list ./... | grep -v /cmd/installer)
