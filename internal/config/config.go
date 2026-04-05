@@ -29,6 +29,8 @@ type Config struct {
 	PayloadVersion           string   `json:"PayloadVersion"`
 	OrgID                    string   `json:"OrgID"`
 	HeartbeatIntervalSeconds int      `json:"HeartbeatIntervalSeconds"`
+	AutoUpdate               bool     `json:"AutoUpdate"`
+	UpdateCheckURL           string   `json:"UpdateCheckURL"`
 }
 
 // platformConfigDir returns the OS-appropriate directory for CertHound config and key files.
@@ -171,6 +173,8 @@ func DefaultConfig() *Config {
 		LogLevel:                 "INFO",
 		PayloadVersion:           "1.0",
 		TLSVerify:                true,
+		AutoUpdate:               true,
+		UpdateCheckURL:           "https://api.github.com/repos/deadbolthq/certhound-agent/releases/latest",
 	}
 	switch runtime.GOOS {
 	case "windows":
