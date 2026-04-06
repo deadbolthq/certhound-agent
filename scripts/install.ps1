@@ -1,6 +1,12 @@
 # CertHound Agent Installer - Windows
 # Requires: PowerShell 5.1+, run as Administrator
-# Get your install command (including key and endpoint) from the CertHound dashboard.
+#
+# Managed install (posts to CertHound dashboard):
+#   irm https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 | iex
+#   (or with params): & ([scriptblock]::Create((irm <url>))) -Key ch_xxx -Endpoint https://api.certhound.dev/v1/ingest
+#
+# Standalone install (local scan only, no dashboard):
+#   irm https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 | iex
 
 param(
     [string]$Key = "",
@@ -18,18 +24,14 @@ $InstallDir   = "C:\Program Files\CertHound"
 $BinaryPath   = "$InstallDir\certhound-agent.exe"
 $ServiceName  = "CertHoundAgent"
 $DisplayName  = "CertHound Agent"
+$BinaryName   = "certhound-agent-windows-amd64.exe"
 
 # ---------------------------------------------------------------------------
 # Validate
 # ---------------------------------------------------------------------------
 
-if (-not $Key) {
-    Write-Error "Error: -Key is required. Get your install command from the CertHound dashboard."
-    exit 1
-}
-
-if (-not $Endpoint) {
-    Write-Error "Error: -Endpoint is required. Get your install command from the CertHound dashboard."
+if (($Key -and -not $Endpoint) -or (-not $Key -and $Endpoint)) {
+    Write-Error "Error: -Key and -Endpoint must be provided together. For standalone mode, omit both."
     exit 1
 }
 
@@ -39,36 +41,85 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
     exit 1
 }
 
+if (-not $Key) {
+    Write-Host "==> Standalone mode: agent will scan locally and not report to any endpoint."
+    Write-Host "    To connect to the CertHound dashboard, re-run with -Key and -Endpoint."
+}
+
 # ---------------------------------------------------------------------------
-# Download binary
+# Download binary + checksums and verify before installing
 # ---------------------------------------------------------------------------
 
 Write-Host "==> Installing CertHound agent (windows/amd64)"
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
-$BinaryUrl = "$ReleasesUrl/certhound-agent-windows-amd64.exe"
-Write-Host "==> Downloading from $BinaryUrl"
-Invoke-WebRequest -Uri $BinaryUrl -OutFile $BinaryPath -UseBasicParsing
-Write-Host "==> Binary installed to $BinaryPath"
+$BinaryUrl   = "$ReleasesUrl/$BinaryName"
+$ChecksumUrl = "$ReleasesUrl/checksums.txt"
+$TmpBinary   = [System.IO.Path]::GetTempFileName() + ".exe"
+$TmpChecksums = [System.IO.Path]::GetTempFileName()
+
+try {
+    Write-Host "==> Downloading binary from $BinaryUrl"
+    Invoke-WebRequest -Uri $BinaryUrl -OutFile $TmpBinary -UseBasicParsing
+
+    Write-Host "==> Downloading checksums from $ChecksumUrl"
+    Invoke-WebRequest -Uri $ChecksumUrl -OutFile $TmpChecksums -UseBasicParsing
+
+    Write-Host "==> Verifying SHA-256 checksum..."
+    $checksumLines = Get-Content $TmpChecksums
+    $expectedLine  = $checksumLines | Where-Object { $_ -match "\b$([regex]::Escape($BinaryName))$" }
+    if (-not $expectedLine) {
+        Write-Error "No checksum entry found for '$BinaryName' in checksums.txt"
+        exit 1
+    }
+    $expectedHash = ($expectedLine -split '\s+')[0].ToLower()
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($TmpBinary)
+    try {
+        $hashBytes = $sha256.ComputeHash($stream)
+    } finally {
+        $stream.Close()
+        $sha256.Dispose()
+    }
+    $actualHash = [BitConverter]::ToString($hashBytes).Replace("-", "").ToLower()
+
+    if ($expectedHash -ne $actualHash) {
+        Write-Error "Checksum mismatch!`n  Expected: $expectedHash`n  Got:      $actualHash"
+        exit 1
+    }
+    Write-Host "==> Checksum verified OK ($actualHash)"
+
+    # Install binary
+    Copy-Item -Path $TmpBinary -Destination $BinaryPath -Force
+    Write-Host "==> Binary installed to $BinaryPath"
+
+} finally {
+    Remove-Item -Path $TmpBinary   -ErrorAction SilentlyContinue
+    Remove-Item -Path $TmpChecksums -ErrorAction SilentlyContinue
+}
 
 # Add install directory to system PATH if not already present
 $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
 if ($machinePath -notlike "*$InstallDir*") {
     Write-Host "==> Adding $InstallDir to system PATH"
     [Environment]::SetEnvironmentVariable("Path", "$machinePath;$InstallDir", "Machine")
-    # Update current session so the service and subsequent commands can find it
     $env:Path = "$env:Path;$InstallDir"
 }
 
 # ---------------------------------------------------------------------------
-# Provision (writes key + config to C:\ProgramData\CertHound\)
+# Provision (writes key + config) — only in managed mode
 # ---------------------------------------------------------------------------
 
-Write-Host "==> Provisioning agent..."
-& $BinaryPath --provision --key $Key --endpoint $Endpoint
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Provisioning failed."
-    exit 1
+if ($Key) {
+    Write-Host "==> Provisioning agent..."
+    & $BinaryPath --provision --key $Key --endpoint $Endpoint
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Provisioning failed."
+        exit 1
+    }
+} else {
+    Write-Host "==> Skipping provisioning (standalone mode)."
 }
 
 # ---------------------------------------------------------------------------
@@ -99,3 +150,9 @@ Write-Host "==> CertHound agent installed and running. (Status: $($svc.Status))"
 Write-Host "    Check status:  Get-Service $ServiceName"
 Write-Host "    View logs:     Get-Content 'C:\ProgramData\CertHound\logs\*.log' -Tail 20"
 Write-Host "    Stop agent:    Stop-Service $ServiceName"
+if (-not $Key) {
+    Write-Host ""
+    Write-Host "    Running in standalone mode. To connect to the dashboard later:"
+    Write-Host "    certhound-agent --provision --key ch_xxx --endpoint https://api.certhound.dev/v1/ingest"
+    Write-Host "    Restart-Service $ServiceName"
+}
