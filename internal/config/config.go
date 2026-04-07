@@ -114,8 +114,14 @@ func ResolveAPIKey(explicitPath string) (string, error) {
 	// 3. Platform-specific default locations
 	candidates := defaultKeyFilePaths()
 	for _, path := range candidates {
-		if key, err := readKeyFile(path); err == nil {
+		key, err := readKeyFile(path)
+		if err == nil {
 			return key, nil
+		}
+		// If the file exists but couldn't be read, it's a permissions problem.
+		// Surface this immediately rather than printing a generic "no key found" message.
+		if _, statErr := os.Stat(path); statErr == nil {
+			return "", fmt.Errorf("API key file exists at %s but could not be read: %w\nTry running with sudo or as root.", path, err)
 		}
 	}
 
