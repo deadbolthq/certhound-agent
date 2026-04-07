@@ -32,6 +32,7 @@ func main() {
 		endpoint   = flag.String("endpoint", "", "CertHound API endpoint to POST results to")
 		apiKeyFile = flag.String("api-key-file", "", "Path to file containing the API key")
 		watchMode  = flag.Bool("watch", false, "Run continuously on the configured scan interval")
+		jsonOutput = flag.Bool("json", false, "Print scan results as JSON to stdout")
 		threshold  = flag.Int("threshold", 0, "Days before expiry to flag as expiring (overrides config)")
 		provision  = flag.Bool("provision", false, "Write API key and config to disk, then exit. Requires --key and --endpoint.")
 		key        = flag.String("key", "", "API key to write during --provision (not used at runtime)")
@@ -41,14 +42,27 @@ func main() {
 		fmt.Fprintf(os.Stderr, "CertHound Agent %s\n\n", version)
 		fmt.Fprintf(os.Stderr, "Scans for X.509 certificates on this host and reports their status.\n\n")
 		fmt.Fprintf(os.Stderr, "Usage:\n  certhound-agent [flags] [path ...]\n\n")
+		fmt.Fprintf(os.Stderr, "Note: all flags must appear before path arguments.\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  certhound-agent --endpoint https://api.certhound.dev/v1/ingest --watch\n")
 		fmt.Fprintf(os.Stderr, "  certhound-agent --watch --threshold 30\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent --json /etc/ssl/certs\n")
 	}
 	flag.Parse()
 	extraPaths := flag.Args()
+
+	// Go's flag package stops parsing at the first non-flag argument, so flags
+	// placed after a path silently become scan paths. Catch this early.
+	for _, arg := range extraPaths {
+		if strings.HasPrefix(arg, "-") {
+			fmt.Fprintf(os.Stderr, "Error: %q looks like a flag but was found after a path argument.\n", arg)
+			fmt.Fprintf(os.Stderr, "All flags must come before path arguments.\n")
+			fmt.Fprintf(os.Stderr, "Example: certhound-agent --watch --endpoint <url> /path/to/certs\n")
+			os.Exit(1)
+		}
+	}
 
 	// --provision: write key + config to disk, then exit.
 	// The install script calls this once after placing the binary.
@@ -131,7 +145,7 @@ func main() {
 		changeTrigger := make(chan struct{}, 1)
 		startFileWatcher(ctx, cfg, log, changeTrigger)
 
-		runScan(ctx, cfg, log, senderClient, agentID)
+		runScan(ctx, cfg, log, senderClient, agentID, *jsonOutput)
 
 		// Check for updates on startup
 		if cfg.AutoUpdate {
@@ -156,14 +170,14 @@ func main() {
 			case <-heartbeatTicker.C:
 				sendHeartbeat(ctx, cfg, log, senderClient, agentID)
 			case <-scanTicker.C:
-				runScan(ctx, cfg, log, senderClient, agentID)
+				runScan(ctx, cfg, log, senderClient, agentID, *jsonOutput)
 			case <-updateTicker.C:
 				if cfg.AutoUpdate {
 					checkForUpdate(ctx, cfg, log)
 				}
 			case <-changeTrigger:
 				log.Infof("File change detected — running triggered scan")
-				runScan(ctx, cfg, log, senderClient, agentID)
+				runScan(ctx, cfg, log, senderClient, agentID, *jsonOutput)
 			}
 		}
 	}
@@ -188,7 +202,7 @@ func main() {
 			watchLoop(ctx)
 		}
 	} else {
-		runScan(context.Background(), cfg, log, senderClient, agentID)
+		runScan(context.Background(), cfg, log, senderClient, agentID, *jsonOutput)
 	}
 }
 
@@ -295,7 +309,7 @@ func checkForUpdate(ctx context.Context, cfg *config.Config, log *logger.Logger)
 	os.Exit(0)
 }
 
-func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string) {
+func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string, jsonOutput bool) {
 	log.Infof("Starting certificate scan...")
 	scanStart := time.Now()
 
@@ -329,6 +343,16 @@ func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, sender
 	}
 
 	log.Infof("Found %d certificate(s)", len(allCerts))
+
+	// Print JSON to stdout if requested
+	if jsonOutput {
+		data, err := scanner.CertificatesToJSON(allCerts)
+		if err != nil {
+			log.Errorf("Error marshaling results as JSON: %v", err)
+		} else {
+			fmt.Println(string(data))
+		}
+	}
 
 	// Send to endpoint if configured
 	if senderClient != nil {
