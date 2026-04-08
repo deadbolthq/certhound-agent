@@ -74,8 +74,8 @@ func (l *Logger) log(level string, format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	line := fmt.Sprintf("%s [%s] %s\n", timestamp, level, msg)
 
-	// Print to console (plain — ANSI codes pollute service logs)
-	fmt.Print(line)
+	// Print to console on stderr — keeps stdout clean for JSON output
+	fmt.Fprint(os.Stderr, line)
 
 	// Also write to file if available (in plain color text)
 	if l.writeFile && l.logFile != nil {

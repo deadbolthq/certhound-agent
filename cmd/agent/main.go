@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -324,8 +325,12 @@ func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, sender
 	for _, path := range paths {
 		certs, err := scanner.ScanCertFiles(path, cfg)
 		if err != nil {
-			log.Errorf("Error scanning %s: %v", path, err)
-			scanErrors = append(scanErrors, fmt.Sprintf("scan %s: %v", path, err))
+			if os.IsNotExist(errors.Unwrap(err)) {
+				log.Warnf("Scan path not found, skipping: %s", path)
+			} else {
+				log.Errorf("Error scanning %s: %v", path, err)
+				scanErrors = append(scanErrors, fmt.Sprintf("scan %s: %v", path, err))
+			}
 			continue
 		}
 		allCerts = append(allCerts, certs...)
