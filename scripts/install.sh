@@ -9,7 +9,7 @@
 set -euo pipefail
 
 RELEASES_URL="https://github.com/deadbolthq/certhound-agent/releases/latest/download"
-INSTALL_PATH="/usr/local/bin/certhound-agent"
+INSTALL_PATH="/usr/bin/certhound-agent"
 SERVICE_NAME="certhound-agent"
 
 # ---------------------------------------------------------------------------
