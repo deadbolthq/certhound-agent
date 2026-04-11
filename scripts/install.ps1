@@ -90,6 +90,15 @@ try {
     }
     Write-Host "==> Checksum verified OK ($actualHash)"
 
+    # Stop and remove existing service before replacing the binary — the running
+    # service holds a file lock on the exe and Copy-Item will fail if it's up.
+    if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+        Write-Host "==> Stopping existing service..."
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        sc.exe delete $ServiceName | Out-Null
+        Start-Sleep -Seconds 2
+    }
+
     # Install binary
     Copy-Item -Path $TmpBinary -Destination $BinaryPath -Force
     Write-Host "==> Binary installed to $BinaryPath"
@@ -125,13 +134,6 @@ if ($Key) {
 # ---------------------------------------------------------------------------
 # Install Windows Service
 # ---------------------------------------------------------------------------
-
-if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-    Write-Host "==> Removing existing service..."
-    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-    sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 5
-}
 
 Write-Host "==> Creating Windows service..."
 New-Service `
