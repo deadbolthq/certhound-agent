@@ -47,7 +47,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  certhound-agent --endpoint https://api.certhound.dev/v1/ingest --watch\n")
+		fmt.Fprintf(os.Stderr, "  certhound-agent --endpoint https://api.certhound.dev/ingest --watch\n")
 		fmt.Fprintf(os.Stderr, "  certhound-agent --watch --threshold 30\n")
 		fmt.Fprintf(os.Stderr, "  certhound-agent --json /etc/ssl/certs\n")
 	}

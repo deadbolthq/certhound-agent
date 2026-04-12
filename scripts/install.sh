@@ -2,7 +2,7 @@
 # CertHound Agent Installer — Linux
 #
 # Managed install (posts to CertHound dashboard):
-#   curl -sSL https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.sh | sudo bash -s -- --key ch_xxx --endpoint https://api.certhound.dev/v1/ingest
+#   curl -sSL https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.sh | sudo bash -s -- --key ch_xxx --endpoint https://api.certhound.dev/ingest
 #
 # Standalone install (local scan only, no dashboard):
 #   curl -sSL https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.sh | sudo bash
@@ -147,6 +147,6 @@ echo "    Stop agent:    systemctl stop $SERVICE_NAME"
 if [[ -z "$KEY" ]]; then
   echo ""
   echo "    Running in standalone mode. To connect to the dashboard later:"
-  echo "    certhound-agent --provision --key ch_xxx --endpoint https://api.certhound.dev/v1/ingest"
+  echo "    certhound-agent --provision --key ch_xxx --endpoint https://api.certhound.dev/ingest"
   echo "    systemctl restart $SERVICE_NAME"
 fi

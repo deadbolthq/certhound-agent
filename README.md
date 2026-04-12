@@ -32,10 +32,10 @@ certhound-agent
 certhound-agent /etc/letsencrypt/live /etc/ssl/certs
 
 # Send results to CertHound API
-certhound-agent --endpoint https://api.certhound.dev/v1/ingest
+certhound-agent --endpoint https://api.certhound.dev/ingest
 
 # Continuous mode: heartbeat hourly, full scan daily, immediate scan on cert file changes
-certhound-agent --endpoint https://api.certhound.dev/v1/ingest --watch
+certhound-agent --endpoint https://api.certhound.dev/ingest --watch
 
 # Custom config file
 certhound-agent --config /etc/certhound/config.json --watch
@@ -63,7 +63,7 @@ Example `config.json`:
   "ScanIntervalSeconds": 86400,
   "HeartbeatIntervalSeconds": 3600,
   "ExpiringThresholdDays": 30,
-  "AWSEndpoint": "https://api.certhound.dev/v1/ingest",
+  "AWSEndpoint": "https://api.certhound.dev/ingest",
   "TLSVerify": true,
   "MaxRetries": 3,
   "AutoUpdate": true,

@@ -48,7 +48,7 @@ func main() {
 			Label{Text: "Endpoint:"},
 			LineEdit{
 				AssignTo:    &endpointEdit,
-				CueBanner:   "https://xxxxxxxx.execute-api.us-east-1.amazonaws.com/ingest",
+				CueBanner:   "https://api.certhound.dev/ingest",
 			},
 			VSpacer{Size: 8},
 

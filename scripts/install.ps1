@@ -3,7 +3,7 @@
 #
 # Managed install (posts to CertHound dashboard):
 #   irm https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 | iex
-#   (or with params): & ([scriptblock]::Create((irm <url>))) -Key ch_xxx -Endpoint https://api.certhound.dev/v1/ingest
+#   (or with params): & ([scriptblock]::Create((irm <url>))) -Key ch_xxx -Endpoint https://api.certhound.dev/ingest
 #
 # Standalone install (local scan only, no dashboard):
 #   irm https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 | iex
@@ -99,6 +99,11 @@ try {
         Start-Sleep -Seconds 2
     }
 
+    # Exclude the install directory from Windows Defender before copying —
+    # Go binaries that do network I/O and self-update often trigger false positives.
+    Write-Host "==> Adding Windows Defender exclusion for $InstallDir..."
+    Add-MpPreference -ExclusionPath $InstallDir -ErrorAction SilentlyContinue
+
     # Install binary
     Copy-Item -Path $TmpBinary -Destination $BinaryPath -Force
     Write-Host "==> Binary installed to $BinaryPath"
@@ -155,6 +160,6 @@ Write-Host "    Stop agent:    Stop-Service $ServiceName"
 if (-not $Key) {
     Write-Host ""
     Write-Host "    Running in standalone mode. To connect to the dashboard later:"
-    Write-Host "    certhound-agent --provision --key ch_xxx --endpoint https://api.certhound.dev/v1/ingest"
+    Write-Host "    certhound-agent --provision --key ch_xxx --endpoint https://api.certhound.dev/ingest"
     Write-Host "    Restart-Service $ServiceName"
 }
