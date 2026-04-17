@@ -137,7 +137,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
-systemctl start "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME"
 
 echo ""
 echo "==> CertHound agent installed and running."
