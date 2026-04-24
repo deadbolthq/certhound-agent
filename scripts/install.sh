@@ -125,8 +125,8 @@ Wants=network-online.target
 
 [Service]
 ExecStart=${INSTALL_PATH} --watch
-Restart=on-failure
-RestartSec=30
+Restart=always
+RestartSec=5
 User=root
 StandardOutput=journal
 StandardError=journal
