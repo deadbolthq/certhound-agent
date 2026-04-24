@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           cd dist
-          sha256sum * > checksums.txt
+          sha256sum --text * > checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
