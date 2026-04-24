@@ -318,23 +318,31 @@ func sendHeartbeat(ctx context.Context, cfg *config.Config, log *logger.Logger, 
 		return
 	}
 	log.Infof("Heartbeat sent to %s", cfg.AWSEndpoint)
+	handlePendingRenewals(ctx, cfg, log, senderClient, renewalClient, agentID, body)
+}
 
-	// Parse any commands the backend piggybacked onto the response.
-	// A missing / empty body is fine — older backends won't include one.
+// handlePendingRenewals parses the response body from ingest for any commands
+// the backend piggybacked onto the ACK (notably "Renew Now" clicks from the
+// dashboard) and runs them inline. Called from both the heartbeat and full-scan
+// paths so a queued command is picked up at the earliest possible check-in.
+func handlePendingRenewals(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, renewalClient *renewal.Client, agentID string, body []byte) {
 	if len(body) == 0 {
 		return
 	}
 	var resp heartbeatResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		log.Debugf("Heartbeat response not JSON (this is fine on older backends): %v", err)
+		log.Debugf("Ingest response not JSON (this is fine on older backends): %v", err)
 		return
 	}
-	if len(resp.PendingRenewals) > 0 && renewalClient != nil {
-		log.Infof("Backend requested renewal for %d domain(s): %v", len(resp.PendingRenewals), resp.PendingRenewals)
-		runRenewalsByDomain(ctx, cfg, log, senderClient, renewalClient, agentID, resp.PendingRenewals)
-	} else if len(resp.PendingRenewals) > 0 {
-		log.Warnf("Backend requested renewal for %v but renewal is not enabled on this agent", resp.PendingRenewals)
+	if len(resp.PendingRenewals) == 0 {
+		return
 	}
+	if renewalClient == nil {
+		log.Warnf("Backend requested renewal for %v but renewal is not enabled on this agent", resp.PendingRenewals)
+		return
+	}
+	log.Infof("Backend requested renewal for %d domain(s): %v", len(resp.PendingRenewals), resp.PendingRenewals)
+	runRenewalsByDomain(ctx, cfg, log, senderClient, renewalClient, agentID, resp.PendingRenewals)
 }
 
 // runRenewalsByDomain runs renewal for each domain the backend asked for
@@ -451,13 +459,18 @@ func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, sender
 		}
 	}
 
-	// Send to endpoint if configured
+	// Send to endpoint if configured. We use SendAndRead so the backend can
+	// piggyback pending commands (e.g. "Renew Now" clicks) onto the scan ACK
+	// — otherwise a user clicking Renew Now has to wait up to one heartbeat
+	// interval before the agent picks up the command.
 	if senderClient != nil {
 		pl := payload.NewPayload(allCerts, cfg, version, agentID, scanStart, scanErrors)
-		if err := senderClient.Send(ctx, pl); err != nil {
+		body, err := senderClient.SendAndRead(ctx, pl)
+		if err != nil {
 			log.Errorf("Error sending payload: %v", err)
 		} else {
 			log.Infof("Payload sent to %s", cfg.AWSEndpoint)
+			handlePendingRenewals(ctx, cfg, log, senderClient, renewalClient, agentID, body)
 		}
 	}
 
