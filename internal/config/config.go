@@ -47,11 +47,17 @@ type Renewal struct {
 }
 
 // RenewalEntry describes one certificate the agent will renew.
+//
+// Output destinations are composable: set CertOutputPath/KeyOutputPath for a
+// PEM file pair on disk, set WindowsCertStore to import into a Windows cert
+// store (e.g. "LocalMachine\\MY"), or set both for redundancy. At least one
+// destination must be set.
 type RenewalEntry struct {
 	Domains            []string `json:"Domains"`
 	WebrootPath        string   `json:"WebrootPath"`
 	CertOutputPath     string   `json:"CertOutputPath"`
 	KeyOutputPath      string   `json:"KeyOutputPath"`
+	WindowsCertStore   string   `json:"WindowsCertStore"`
 	PostRenewalCommand string   `json:"PostRenewalCommand"`
 }
 
@@ -85,8 +91,17 @@ func (r *Renewal) Validate() error {
 		if entry.WebrootPath == "" {
 			return fmt.Errorf("renewal.Certs[%d] missing WebrootPath", i)
 		}
-		if entry.CertOutputPath == "" || entry.KeyOutputPath == "" {
-			return fmt.Errorf("renewal.Certs[%d] missing CertOutputPath or KeyOutputPath", i)
+		hasFilePair := entry.CertOutputPath != "" && entry.KeyOutputPath != ""
+		hasPartialFilePair := (entry.CertOutputPath != "") != (entry.KeyOutputPath != "")
+		hasStore := entry.WindowsCertStore != ""
+		if hasPartialFilePair {
+			return fmt.Errorf("renewal.Certs[%d] has CertOutputPath or KeyOutputPath set but not both", i)
+		}
+		if !hasFilePair && !hasStore {
+			return fmt.Errorf("renewal.Certs[%d] must set either CertOutputPath+KeyOutputPath or WindowsCertStore", i)
+		}
+		if hasStore && runtime.GOOS != "windows" {
+			return fmt.Errorf("renewal.Certs[%d] WindowsCertStore is only supported on Windows", i)
 		}
 	}
 	return nil

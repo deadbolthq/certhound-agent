@@ -11,6 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-acme/lego/v4 v4.35.1
 	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
+	software.sslmate.com/src/go-pkcs12 v0.7.1
 )
 
 require (

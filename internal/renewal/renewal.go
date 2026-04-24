@@ -137,23 +137,35 @@ func (c *Client) Renew(entry config.RenewalEntry) Result {
 		result.NotAfter = parsed.NotAfter
 	}
 
-	// Write the new key (from our generated certKey, not certs.PrivateKey,
-	// because lego returns certs.PrivateKey only when it generated the key
-	// itself — here we passed one in).
-	keyDER, err := x509.MarshalECPrivateKey(certKey)
-	if err != nil {
-		result.Error = fmt.Sprintf("marshaling cert key: %v", err)
-		return result
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	// File pair and Windows cert store are independent output destinations.
+	// Either or both can be configured per entry. If neither is set the
+	// config validator would have rejected the entry at load time, so this
+	// loop always performs at least one write.
+	if entry.CertOutputPath != "" && entry.KeyOutputPath != "" {
+		// Write the new key (from our generated certKey, not certs.PrivateKey,
+		// because lego returns certs.PrivateKey only when it generated the key
+		// itself — here we passed one in).
+		keyDER, err := x509.MarshalECPrivateKey(certKey)
+		if err != nil {
+			result.Error = fmt.Sprintf("marshaling cert key: %v", err)
+			return result
+		}
+		keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 
-	if err := writeAtomic(entry.KeyOutputPath, keyPEM, 0600); err != nil {
-		result.Error = fmt.Sprintf("writing key: %v", err)
-		return result
+		if err := writeAtomic(entry.KeyOutputPath, keyPEM, 0600); err != nil {
+			result.Error = fmt.Sprintf("writing key: %v", err)
+			return result
+		}
+		if err := writeAtomic(entry.CertOutputPath, certs.Certificate, 0644); err != nil {
+			result.Error = fmt.Sprintf("writing cert: %v", err)
+			return result
+		}
 	}
-	if err := writeAtomic(entry.CertOutputPath, certs.Certificate, 0644); err != nil {
-		result.Error = fmt.Sprintf("writing cert: %v", err)
-		return result
+	if entry.WindowsCertStore != "" {
+		if err := ImportPFXToStore(entry.WindowsCertStore, certs.Certificate, certKey, entry.Domains); err != nil {
+			result.Error = fmt.Sprintf("importing to %s: %v", entry.WindowsCertStore, err)
+			return result
+		}
 	}
 
 	// Post-renewal reload command — best-effort. If it fails, we still
