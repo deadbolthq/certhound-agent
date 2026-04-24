@@ -31,6 +31,65 @@ type Config struct {
 	HeartbeatIntervalSeconds int      `json:"HeartbeatIntervalSeconds"`
 	AutoUpdate               bool     `json:"AutoUpdate"`
 	UpdateCheckURL           string   `json:"UpdateCheckURL"`
+	Renewal                  Renewal  `json:"Renewal"`
+}
+
+// Renewal configures ACME certificate auto-renewal. Disabled by default —
+// users opt in by setting Enabled=true and adding at least one entry to Certs.
+type Renewal struct {
+	Enabled              bool           `json:"Enabled"`
+	ACMEEmail            string         `json:"ACMEEmail"`
+	ACMEDirectoryURL     string         `json:"ACMEDirectoryURL"`
+	ChallengeType        string         `json:"ChallengeType"` // "http-01" (only one supported today)
+	RenewalThresholdDays int            `json:"RenewalThresholdDays"`
+	AccountKeyPath       string         `json:"AccountKeyPath"` // where the ACME account key lives
+	Certs                []RenewalEntry `json:"Certs"`
+}
+
+// RenewalEntry describes one certificate the agent will renew.
+type RenewalEntry struct {
+	Domains            []string `json:"Domains"`
+	WebrootPath        string   `json:"WebrootPath"`
+	CertOutputPath     string   `json:"CertOutputPath"`
+	KeyOutputPath      string   `json:"KeyOutputPath"`
+	PostRenewalCommand string   `json:"PostRenewalCommand"`
+}
+
+// MatchesDomain returns true if this entry covers the given domain.
+// Used to map a scanned cert back to its renewal config.
+func (e RenewalEntry) MatchesDomain(domain string) bool {
+	for _, d := range e.Domains {
+		if strings.EqualFold(d, domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// Validate returns an error if the renewal config is enabled but incomplete.
+// Called during startup when Renewal.Enabled is true.
+func (r *Renewal) Validate() error {
+	if !r.Enabled {
+		return nil
+	}
+	if r.ACMEEmail == "" {
+		return fmt.Errorf("renewal.ACMEEmail is required when renewal is enabled")
+	}
+	if r.ChallengeType != "" && r.ChallengeType != "http-01" {
+		return fmt.Errorf("renewal.ChallengeType %q not supported (use http-01)", r.ChallengeType)
+	}
+	for i, entry := range r.Certs {
+		if len(entry.Domains) == 0 {
+			return fmt.Errorf("renewal.Certs[%d] has no domains", i)
+		}
+		if entry.WebrootPath == "" {
+			return fmt.Errorf("renewal.Certs[%d] missing WebrootPath", i)
+		}
+		if entry.CertOutputPath == "" || entry.KeyOutputPath == "" {
+			return fmt.Errorf("renewal.Certs[%d] missing CertOutputPath or KeyOutputPath", i)
+		}
+	}
+	return nil
 }
 
 // platformConfigDir returns the OS-appropriate directory for CertHound config and key files.
@@ -82,6 +141,10 @@ func LoadConfig(path string) (*Config, error) {
 	cfg := DefaultConfig()
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+	}
+
+	if err := cfg.Renewal.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid renewal config: %w", err)
 	}
 
 	return cfg, nil
@@ -181,6 +244,14 @@ func DefaultConfig() *Config {
 		TLSVerify:                true,
 		AutoUpdate:               true,
 		UpdateCheckURL:           "https://api.github.com/repos/deadbolthq/certhound-agent/releases/latest",
+		Renewal: Renewal{
+			Enabled:              false,
+			ACMEDirectoryURL:     "https://acme-v02.api.letsencrypt.org/directory",
+			ChallengeType:        "http-01",
+			RenewalThresholdDays: 30,
+			AccountKeyPath:       filepath.Join(platformConfigDir(), "acme-account.key"),
+			Certs:                []RenewalEntry{},
+		},
 	}
 	switch runtime.GOOS {
 	case "windows":
