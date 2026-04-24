@@ -92,7 +92,14 @@ func main() {
 	}
 
 	// Load config: --config flag > auto-discovered file > built-in defaults
+	// Any config-load outcome is stashed here and surfaced after the logger is
+	// initialized — previously a failed auto-discovery would silently fall
+	// through to defaults, making it impossible to see why a user-edited
+	// config was being ignored.
 	cfg := config.DefaultConfig()
+	var configLoadedFrom string
+	var configLoadErrorPath string
+	var configLoadError error
 	if *configPath != "" {
 		loaded, err := config.LoadConfig(*configPath)
 		if err != nil {
@@ -100,6 +107,7 @@ func main() {
 			os.Exit(1)
 		}
 		cfg = loaded
+		configLoadedFrom = *configPath
 	} else {
 		candidates := []string{
 			"/etc/certhound/config.json",
@@ -108,12 +116,20 @@ func main() {
 			"config.json",
 		}
 		for _, try := range candidates {
-			if _, err := os.Stat(try); err == nil {
-				if loaded, err := config.LoadConfig(try); err == nil {
-					cfg = loaded
-					break
-				}
+			if _, err := os.Stat(try); err != nil {
+				continue
 			}
+			loaded, err := config.LoadConfig(try)
+			if err != nil {
+				// A file is present but unreadable/invalid — remember it so
+				// we can warn the user instead of silently using defaults.
+				configLoadErrorPath = try
+				configLoadError = err
+				continue
+			}
+			cfg = loaded
+			configLoadedFrom = try
+			break
 		}
 	}
 
@@ -134,6 +150,21 @@ func main() {
 	log := logger.NewLogger(cfg.LogPath, cfg.LogLevel, cfg.Verbose)
 	log.Infof("CertHound agent %s starting on %s/%s (id: %s)", version, runtime.GOOS, runtime.GOARCH, agentID)
 	defer log.Close()
+
+	// Surface config-load outcome now that the logger exists. A rejected
+	// auto-discovered config used to fall through to defaults silently,
+	// which made it impossible to tell why a user's edits weren't taking
+	// effect — the operator would see an agent that "started fine" but
+	// scanned the wrong paths and never ran renewal.
+	if configLoadError != nil {
+		log.Errorf("Config file at %s could not be loaded and was ignored: %v", configLoadErrorPath, configLoadError)
+		log.Errorf("Falling back to built-in defaults. Fix the config file and restart.")
+	}
+	if configLoadedFrom != "" {
+		log.Infof("Config loaded from: %s", configLoadedFrom)
+	} else {
+		log.Infof("No config file found — using built-in defaults")
+	}
 
 	// Sender is only needed when an endpoint is configured
 	var senderClient *sender.Sender
