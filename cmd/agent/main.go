@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,11 +18,19 @@ import (
 	"github.com/deadbolthq/certhound-agent/internal/identity"
 	"github.com/deadbolthq/certhound-agent/internal/logger"
 	"github.com/deadbolthq/certhound-agent/internal/payload"
+	"github.com/deadbolthq/certhound-agent/internal/renewal"
 	"github.com/deadbolthq/certhound-agent/internal/scanner"
 	"github.com/deadbolthq/certhound-agent/internal/sender"
 	"github.com/deadbolthq/certhound-agent/internal/updater"
 	"github.com/fsnotify/fsnotify"
 )
+
+// heartbeatResponse is what the backend returns in the body of a successful
+// heartbeat POST. PendingRenewals is a list of primary domains the dashboard
+// has asked the agent to renew now — e.g. the user clicked "Renew Now".
+type heartbeatResponse struct {
+	PendingRenewals []string `json:"pending_renewals"`
+}
 
 // version is injected at build time via: -ldflags "-X main.version=v1.2.3"
 // The tag includes the "v" prefix, so format strings should use %s not v%s.
@@ -140,13 +149,27 @@ func main() {
 		log.Infof("Sender initialized for endpoint: %s", cfg.AWSEndpoint)
 	}
 
+	// Renewal client is only initialized when opted in via config.
+	// Failing to init is not fatal — the agent still scans and reports;
+	// the dashboard will just show renewal as unavailable on this host.
+	var renewalClient *renewal.Client
+	if cfg.Renewal.Enabled {
+		rc, err := renewal.NewClient(cfg.Renewal)
+		if err != nil {
+			log.Errorf("Renewal enabled in config but client failed to initialize: %v", err)
+		} else {
+			renewalClient = rc
+			log.Infof("ACME renewal client ready (account: %s, directory: %s)", cfg.Renewal.ACMEEmail, cfg.Renewal.ACMEDirectoryURL)
+		}
+	}
+
 	// watchLoop runs the continuous scan/heartbeat loop until ctx is cancelled.
 	// Extracted so it can be called from either CLI mode or the Windows service handler.
 	watchLoop := func(ctx context.Context) {
 		changeTrigger := make(chan struct{}, 1)
 		startFileWatcher(ctx, cfg, log, changeTrigger)
 
-		runScan(ctx, cfg, log, senderClient, agentID, *jsonOutput)
+		runScan(ctx, cfg, log, senderClient, renewalClient, agentID, *jsonOutput)
 
 		// Check for updates on startup
 		if cfg.AutoUpdate {
@@ -169,16 +192,16 @@ func main() {
 				log.Infof("CertHound agent stopped.")
 				return
 			case <-heartbeatTicker.C:
-				sendHeartbeat(ctx, cfg, log, senderClient, agentID)
+				sendHeartbeat(ctx, cfg, log, senderClient, renewalClient, agentID, version)
 			case <-scanTicker.C:
-				runScan(ctx, cfg, log, senderClient, agentID, *jsonOutput)
+				runScan(ctx, cfg, log, senderClient, renewalClient, agentID, *jsonOutput)
 			case <-updateTicker.C:
 				if cfg.AutoUpdate {
 					checkForUpdate(ctx, cfg, log)
 				}
 			case <-changeTrigger:
 				log.Infof("File change detected — running triggered scan")
-				runScan(ctx, cfg, log, senderClient, agentID, *jsonOutput)
+				runScan(ctx, cfg, log, senderClient, renewalClient, agentID, *jsonOutput)
 			}
 		}
 	}
@@ -203,7 +226,7 @@ func main() {
 			watchLoop(ctx)
 		}
 	} else {
-		runScan(context.Background(), cfg, log, senderClient, agentID, *jsonOutput)
+		runScan(context.Background(), cfg, log, senderClient, renewalClient, agentID, *jsonOutput)
 	}
 }
 
@@ -280,17 +303,86 @@ func startFileWatcher(ctx context.Context, cfg *config.Config, log *logger.Logge
 	}()
 }
 
-// sendHeartbeat builds and sends a lightweight heartbeat payload.
-func sendHeartbeat(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string) {
+// sendHeartbeat builds and sends a lightweight heartbeat payload. When the
+// backend replies with pending_renewals (the dashboard's Renew Now button),
+// the named domains are renewed inline before the function returns.
+func sendHeartbeat(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, renewalClient *renewal.Client, agentID string, version string) {
 	if senderClient == nil {
 		log.Debugf("Heartbeat skipped — no endpoint configured")
 		return
 	}
 	pl := payload.NewHeartbeatPayload(cfg, version, agentID)
-	if err := senderClient.Send(ctx, pl); err != nil {
+	body, err := senderClient.SendAndRead(ctx, pl)
+	if err != nil {
 		log.Errorf("Error sending heartbeat: %v", err)
+		return
+	}
+	log.Infof("Heartbeat sent to %s", cfg.AWSEndpoint)
+
+	// Parse any commands the backend piggybacked onto the response.
+	// A missing / empty body is fine — older backends won't include one.
+	if len(body) == 0 {
+		return
+	}
+	var resp heartbeatResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Debugf("Heartbeat response not JSON (this is fine on older backends): %v", err)
+		return
+	}
+	if len(resp.PendingRenewals) > 0 && renewalClient != nil {
+		log.Infof("Backend requested renewal for %d domain(s): %v", len(resp.PendingRenewals), resp.PendingRenewals)
+		runRenewalsByDomain(ctx, cfg, log, senderClient, renewalClient, agentID, resp.PendingRenewals)
+	} else if len(resp.PendingRenewals) > 0 {
+		log.Warnf("Backend requested renewal for %v but renewal is not enabled on this agent", resp.PendingRenewals)
+	}
+}
+
+// runRenewalsByDomain runs renewal for each domain the backend asked for
+// (by primary domain name) and ships results back.
+func runRenewalsByDomain(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, renewalClient *renewal.Client, agentID string, domains []string) {
+	var results []renewal.Result
+	for _, domain := range domains {
+		entry := renewal.FindByDomain(cfg.Renewal, domain)
+		if entry == nil {
+			log.Warnf("Backend requested renewal for %q but no matching entry in agent config — skipping", domain)
+			results = append(results, renewal.Result{
+				Domain:     domain,
+				Domains:    []string{domain},
+				Success:    false,
+				Error:      "no matching entry in agent config",
+				FinishedAt: time.Now().UTC(),
+			})
+			continue
+		}
+		log.Infof("Renewing %v (manual trigger)", entry.Domains)
+		r := renewalClient.Renew(*entry)
+		logRenewalResult(log, r)
+		results = append(results, r)
+	}
+	sendRenewalResults(ctx, cfg, log, senderClient, agentID, results)
+}
+
+func logRenewalResult(log *logger.Logger, r renewal.Result) {
+	if r.Success {
+		if r.Error != "" {
+			log.Warnf("Renewal of %s succeeded with warning: %s (new expiry: %s)", r.Domain, r.Error, r.NotAfter.Format(time.RFC3339))
+		} else {
+			log.Infof("Renewal of %s succeeded (new expiry: %s)", r.Domain, r.NotAfter.Format(time.RFC3339))
+		}
 	} else {
-		log.Infof("Heartbeat sent to %s", cfg.AWSEndpoint)
+		log.Errorf("Renewal of %s failed: %s", r.Domain, r.Error)
+	}
+}
+
+func sendRenewalResults(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string, results []renewal.Result) {
+	if senderClient == nil || len(results) == 0 {
+		return
+	}
+	pl := payload.NewRenewalPayload(results, cfg, version, agentID)
+	if err := senderClient.SendRenewal(ctx, pl); err != nil {
+		log.Errorf("Error sending renewal results: %v", err)
+	} else {
+		log.Infof("Renewal results (%d) sent to %s", len(results), cfg.AWSEndpoint)
 	}
 }
 
@@ -310,7 +402,7 @@ func checkForUpdate(ctx context.Context, cfg *config.Config, log *logger.Logger)
 	os.Exit(0)
 }
 
-func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, agentID string, jsonOutput bool) {
+func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, senderClient *sender.Sender, renewalClient *renewal.Client, agentID string, jsonOutput bool) {
 	log.Infof("Starting certificate scan...")
 	scanStart := time.Now()
 
@@ -366,6 +458,24 @@ func runScan(ctx context.Context, cfg *config.Config, log *logger.Logger, sender
 			log.Errorf("Error sending payload: %v", err)
 		} else {
 			log.Infof("Payload sent to %s", cfg.AWSEndpoint)
+		}
+	}
+
+	// Auto-renew any certs that are within the renewal window. Done after the
+	// scan so we have fresh NotAfter data to decide from. Renewal results are
+	// sent to the backend as a separate payload.
+	if renewalClient != nil {
+		due := renewal.FindDue(allCerts, cfg.Renewal, time.Now())
+		if len(due) > 0 {
+			log.Infof("Auto-renewal: %d cert(s) within threshold — renewing now", len(due))
+			var results []renewal.Result
+			for _, entry := range due {
+				log.Infof("Renewing %v", entry.Domains)
+				r := renewalClient.Renew(entry)
+				logRenewalResult(log, r)
+				results = append(results, r)
+			}
+			sendRenewalResults(ctx, cfg, log, senderClient, agentID, results)
 		}
 	}
 
