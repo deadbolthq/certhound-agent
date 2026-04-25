@@ -11,7 +11,7 @@ Instead, email **security@certhound.dev** with:
 - Affected version(s) — `certhound-agent --version` if you have it installed
 - Your name + handle if you'd like credit in the disclosure
 
-We aim to acknowledge reports within **2 business days** and provide a remediation plan within **7 days** for confirmed issues.
+We'll acknowledge your report and follow up with a remediation plan as soon as we're able. CertHound is currently maintained by a small team, so response times may vary, but we take every report seriously and will keep you updated on progress.
 
 ## Scope
 
