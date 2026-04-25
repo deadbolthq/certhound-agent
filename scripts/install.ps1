@@ -2,11 +2,12 @@
 # Requires: PowerShell 5.1+, run as Administrator
 #
 # Managed install (posts to CertHound dashboard):
-#   irm https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 | iex
-#   (or with params): & ([scriptblock]::Create((irm <url>))) -Key ch_xxx -Endpoint https://api.certhound.dev/ingest
+#   iwr https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 -OutFile install.ps1 -UseBasicParsing
+#   .\install.ps1 -Key ch_xxx -Endpoint https://api.certhound.dev/ingest
 #
 # Standalone install (local scan only, no dashboard):
-#   irm https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 | iex
+#   iwr https://raw.githubusercontent.com/deadbolthq/certhound-agent/main/scripts/install.ps1 -OutFile install.ps1 -UseBasicParsing
+#   .\install.ps1
 
 param(
     [string]$Key = "",

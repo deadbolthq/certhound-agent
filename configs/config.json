@@ -1,24 +1,34 @@
 {
   "ScanPaths": [
+    "/etc/letsencrypt/live",
     "/etc/ssl/certs",
     "/usr/local/share/ca-certificates"
   ],
   "ScanPathsWindows": [
-    "C:\\ProgramData\\ssl\\certs",
-    "C:\\Windows\\System32\\certificates"
+    "C:\\ProgramData\\CertHound\\certs"
   ],
-  "ScanIntervalSeconds": 60,
-  "HeartbeatIntervalSeconds": 30,
-  "ExpiringThresholdDays": 10,
-  "LogPath": "../../logs/",
-  "Verbose": true,
-  "LogLevel": "DEBUG",
-  "AWSEndpoint": "https://your-api-id.execute-api.us-east-1.amazonaws.com/ingest",
+  "ScanIntervalSeconds": 86400,
+  "HeartbeatIntervalSeconds": 3600,
+  "ExpiringThresholdDays": 30,
+  "LogPath": "/var/log/certhound",
+  "Verbose": false,
+  "LogLevel": "INFO",
+  "AWSEndpoint": "https://api.certhound.dev/ingest",
   "TLSVerify": true,
   "MaxRetries": 3,
-  "AgentName": "CertHoundAgent",
+  "AgentName": "certhound-agent",
   "IncludeIPAddresses": false,
   "IncludeSelfSigned": false,
   "PayloadVersion": "1.0",
-  "OrgID": ""
+  "AutoUpdate": true,
+  "UpdateCheckURL": "https://api.github.com/repos/deadbolthq/certhound-agent/releases/latest",
+  "Renewal": {
+    "Enabled": false,
+    "ACMEEmail": "",
+    "ACMEDirectoryURL": "https://acme-v02.api.letsencrypt.org/directory",
+    "ChallengeType": "http-01",
+    "RenewalThresholdDays": 30,
+    "AccountKeyPath": "/etc/certhound/acme-account.key",
+    "Certs": []
+  }
 }
