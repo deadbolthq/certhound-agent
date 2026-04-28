@@ -1,8 +1,8 @@
 # CertHound Agent
 
-**SSL/TLS certificate inventory and auto-renewal for your servers.**
+**SSL/TLS certificate inventory and managed-renewal for your servers.**
 
-A small, single-binary Go agent that finds every certificate on a host — on disk and inside the Windows certificate store — reports their status, and (optionally) renews them via Let's Encrypt before they expire. Cross-platform, no runtime dependencies, no daemon to install besides the agent itself.
+A small, single-binary Go agent that finds every certificate on a host — on disk and inside the Windows certificate store — reports their status to a centralized dashboard, and (optionally) renews them via Let's Encrypt before they expire. Cross-platform, no runtime dependencies, no daemon to install besides the agent itself. Deploy to every server in your fleet — giving you a single view of every certificate across your entire infrastructure.
 
 Use it standalone for local cert scanning, or pair it with the [CertHound dashboard](https://app.certhound.dev) for centralized monitoring across your fleet.
 
@@ -30,11 +30,12 @@ Use it standalone for local cert scanning, or pair it with the [CertHound dashbo
 - **Cross-platform** — Linux (amd64/arm64), macOS, Windows (amd64). Single static binary.
 - **Filesystem scanning** — recursively walks configured directories for PEM/CRT/DER certificates.
 - **Windows certificate store** — enumerates Current User and Local Machine stores (MY, ROOT, CA, TrustedPeople, TrustedPublisher).
-- **ACME auto-renewal** — issues and renews Let's Encrypt certificates via HTTP-01 webroot challenge.
+- **ACME managed-renewal** — issues and renews Let's Encrypt certificates via HTTP-01 webroot challenge, managed by the centralized dashboard.
 - **Windows cert-store import** — renewed certs can be imported directly into `LocalMachine\MY` or `CurrentUser\MY` via CryptoAPI; no PEM-on-disk required.
 - **Watch mode** — daily full scans, hourly heartbeats, and immediate scans triggered by `fsnotify` cert-file changes.
 - **Auto-update** — agent self-updates from GitHub Releases with SHA-256 checksum verification and automatic rollback on failure.
 - **Detailed extraction** — SHA-256 fingerprints, SANs (DNS, IP, URI, email), key/extended key usage, OCSP/CRL/AIA URLs, signature algorithm, key bits, NotBefore/NotAfter.
+- **Fleet-wide visibility** — Each agent reports to the same centralized dashboard. Deploy to 5 servers or 500 — every certificate across your entire infrastructure is visible in one place, with expiry alerts before they become incidents.
 
 ## Install
 
